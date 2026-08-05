@@ -7,10 +7,10 @@ import { MCU_PINS } from "$lib/data/mcu-pins.js";
 
 export const TITLE_H = 40; // title bar height
 export const PIN_R = 7; // pin dot radius
-export const STUB_LEN = 36; // wire exit stub length
+export const STUB_LEN = 40; // wire exit stub length
 export const GRID = 20; // snap grid size
 
-// ── BUG FIX #2: single formula used by BOTH renderer and router ──
+// ── Single formula used by BOTH renderer and router ──────────────────
 export function mcuPinSpacing(height, pinCount) {
   if (pinCount <= 1) return 0;
   return (height - TITLE_H - 20) / (pinCount - 1);
@@ -23,7 +23,9 @@ export function mcuHeight(compId) {
   return count * 26 + TITLE_H + 20;
 }
 
-/** Compute world {x, y, side} of a pin on a component */
+// ── Pin world positions ───────────────────────────────────────────────
+
+/** Returns a function (pinId) => {x, y, side} for the given component */
 export function pinPos(comp) {
   return (pinId) => {
     const { x, y, width: W, height: H } = comp;
@@ -33,7 +35,7 @@ export function pinPos(comp) {
       const left = pins.left ?? [];
       const right = pins.right ?? [];
       const count = Math.max(left.length, right.length);
-      const sp = mcuPinSpacing(H, count); // ← unified formula
+      const sp = mcuPinSpacing(H, count);
       const li = left.findIndex((p) => p.id === pinId);
       if (li >= 0) return { x, y: y + TITLE_H + 10 + li * sp, side: "left" };
       const ri = right.findIndex((p) => p.id === pinId);
@@ -42,19 +44,20 @@ export function pinPos(comp) {
     }
     const pin = (comp.pins ?? []).find((p) => p.id === pinId);
     if (!pin) return { x: x + W / 2, y: y + H / 2, side: "right" };
+    const pos = isFinite(pin.pos) ? pin.pos : 0.5;
     switch (pin.side) {
       case "left":
-        return { x, y: y + TITLE_H + (H - TITLE_H) * pin.pos, side: "left" };
+        return { x, y: y + TITLE_H + (H - TITLE_H) * pos, side: "left" };
       case "right":
         return {
           x: x + W,
-          y: y + TITLE_H + (H - TITLE_H) * pin.pos,
+          y: y + TITLE_H + (H - TITLE_H) * pos,
           side: "right",
         };
       case "top":
-        return { x: x + W * pin.pos, y, side: "top" };
+        return { x: x + W * pos, y, side: "top" };
       case "bottom":
-        return { x: x + W * pin.pos, y: y + H, side: "bottom" };
+        return { x: x + W * pos, y: y + H, side: "bottom" };
       default:
         return { x: x + W / 2, y: y + H / 2, side: "right" };
     }
@@ -80,44 +83,71 @@ export function allPinPositions(comp) {
   return result;
 }
 
-/** Exit stub: wire leaves pin perpendicular, optionally offset for fan-out */
-function stub(p, offsetPx = 0) {
+// ── Wire routing ──────────────────────────────────────────────────────
+
+/** Exit stub: wire leaves pin perpendicular */
+function stub(p) {
   switch (p.side) {
     case "left":
-      return { x: p.x - STUB_LEN, y: p.y + offsetPx };
+      return { x: p.x - STUB_LEN, y: p.y };
     case "right":
-      return { x: p.x + STUB_LEN, y: p.y + offsetPx };
+      return { x: p.x + STUB_LEN, y: p.y };
     case "top":
-      return { x: p.x + offsetPx, y: p.y - STUB_LEN };
+      return { x: p.x, y: p.y - STUB_LEN };
     case "bottom":
-      return { x: p.x + offsetPx, y: p.y + STUB_LEN };
+      return { x: p.x, y: p.y + STUB_LEN };
     default:
       return { x: p.x + STUB_LEN, y: p.y };
   }
 }
 
 /**
- * Orthogonal wire path.
- * wireIndex: offset index for fan-out (avoids overlap when multiple
- * wires leave adjacent pins on the same side)
+ * Simple integer hash of a string — used to give each wire a stable,
+ * unique lane offset based on its endpoint coords.
+ */
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+/**
+ * Orthogonal wire routing with improved fan-out.
+ *
+ * Each wire gets a unique "lane" based on:
+ *   1. wireIndex  — position in the wires array
+ *   2. A hash of its endpoint positions — stable across undo/redo
+ *
+ * The lane offset shifts the MIDDLE segment so parallel wires in the
+ * same corridor are visually separated.
  */
 export function routeWire(p1, p2, wireIndex = 0) {
-  const off = (wireIndex % 2 === 0 ? 1 : -1) * Math.floor(wireIndex / 2) * 10;
-  const s1 = stub(p1, off);
-  const s2 = stub(p2, off);
+  const key = `${Math.round(p1.x)},${Math.round(p1.y)},${Math.round(p2.x)},${Math.round(p2.y)}`;
+  const hashOff = (hashStr(key) % 4) * 12; // 0, 12, 24, 36 px bands
+  const sign = wireIndex % 2 === 0 ? 1 : -1;
+  const lane = sign * (Math.floor(wireIndex / 2) * 20 + hashOff);
+
+  const s1 = stub(p1);
+  const s2 = stub(p2);
   const h1 = p1.side === "left" || p1.side === "right";
   const h2 = p2.side === "left" || p2.side === "right";
   const pts = [p1, s1];
 
   if (h1 && h2) {
-    const my = (s1.y + s2.y) / 2;
+    // Both horizontal exits — meet at a shared Y lane
+    const my = (s1.y + s2.y) / 2 + lane;
     pts.push({ x: s1.x, y: my }, { x: s2.x, y: my });
   } else if (!h1 && !h2) {
-    const mx = (s1.x + s2.x) / 2;
+    // Both vertical exits — meet at a shared X lane
+    const mx = (s1.x + s2.x) / 2 + lane;
     pts.push({ x: mx, y: s1.y }, { x: mx, y: s2.y });
   } else if (h1) {
+    // p1 horizontal, p2 vertical — L-bend
     pts.push({ x: s1.x, y: s2.y });
   } else {
+    // p1 vertical, p2 horizontal — L-bend
     pts.push({ x: s2.x, y: s1.y });
   }
   pts.push(s2, p2);
@@ -132,7 +162,9 @@ export function routePreview(p1, cx, cy) {
   return toPath(pts);
 }
 
-/** Midpoint along the actual path segments (for wire label) */
+// ── Label position helpers ────────────────────────────────────────────
+
+/** True midpoint along the path segments */
 export function pathMidpoint(pts) {
   if (!pts || pts.length < 2) return { x: 0, y: 0 };
   let total = 0;
@@ -144,10 +176,11 @@ export function pathMidpoint(pts) {
     segs.push({ len, from: pts[i - 1], to: pts[i] });
     total += len;
   }
+  if (total === 0) return { x: pts[0].x, y: pts[0].y };
   let remaining = total / 2;
   for (const seg of segs) {
     if (remaining <= seg.len) {
-      const t = remaining / seg.len;
+      const t = seg.len === 0 ? 0 : remaining / seg.len;
       return {
         x: seg.from.x + (seg.to.x - seg.from.x) * t,
         y: seg.from.y + (seg.to.y - seg.from.y) * t,
@@ -157,6 +190,27 @@ export function pathMidpoint(pts) {
   }
   return pts[Math.floor(pts.length / 2)];
 }
+
+/**
+ * Midpoint of the LONGEST segment — best spot for a wire label
+ * because long segments are less likely to overlap other elements.
+ */
+export function labelPos(pts) {
+  if (!pts || pts.length < 2) return { x: 0, y: 0 };
+  let best = { len: -1, from: pts[0], to: pts[1] };
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i - 1].x;
+    const dy = pts[i].y - pts[i - 1].y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > best.len) best = { len, from: pts[i - 1], to: pts[i] };
+  }
+  return {
+    x: (best.from.x + best.to.x) / 2,
+    y: (best.from.y + best.to.y) / 2,
+  };
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────
 
 function toPath(pts) {
   return pts

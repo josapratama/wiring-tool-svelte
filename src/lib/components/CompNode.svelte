@@ -94,6 +94,81 @@
   $: isHighlighted = selected || inMultiSel
   $: strokeColor   = selected ? '#4f9cf9' : inMultiSel ? '#a78bfa' : theme.border
   $: strokeWidth   = isHighlighted ? 3 : 2
+
+  // GND symbol: three horizontal bars (standard schematic symbol)
+  // Always points DOWNWARD regardless of pin side.
+  function gndSymbol(cx, cy, side) {
+    let ox = 0, oy = 0
+    if (side === 'left')   ox = -14
+    if (side === 'right')  ox =  14
+    if (side === 'top')    oy = -14
+    if (side === 'bottom') oy =  14
+    const sx = cx + ox, sy = cy + oy
+    return {
+      stub: `M ${cx} ${cy} L ${sx} ${sy}`,
+      bar1: `M ${sx - 10} ${sy}     L ${sx + 10} ${sy}`,
+      bar2: `M ${sx -  6} ${sy + 5} L ${sx +  6} ${sy + 5}`,
+      bar3: `M ${sx -  2} ${sy +10} L ${sx +  2} ${sy +10}`,
+    }
+  }
+
+  // Power net label: a small flag showing the net name (+5V, +12V, +3.3V)
+  // pointing AWAY from the component body — standard schematic power port symbol.
+  //   left  pin  →  flag points left  (arrow tip on left)
+  //   right pin  →  flag points right (arrow tip on right)
+  //   top   pin  →  flag points up
+  //   bottom pin →  flag points down
+  const POWER_NETS = {
+    // pin ID → net name
+    'V5':'⊕5V', 'V5_L':'⊕5V', 'VCC':'⊕5V', 'VBUS':'⊕5V', 'VSYS':'⊕5V',
+    'V3V3':'⊕3V3', 'V30':'⊕3V3', 'P3V3_1':'⊕3V3', 'P3V3_17':'⊕3V3',
+    'OUT+':'⊕5V',   // buck converter output
+  }
+
+  // Label keyword → net name (checked if pin ID not found)
+  const POWER_LABEL_NETS = [
+    { re: /3\.3V|3V3/i,  net: '⊕3V3' },
+    { re: /5V/i,         net: '⊕5V'  },
+    { re: /12V/i,        net: '+12V' },
+    { re: /\bVCC\b/i,    net: '⊕5V'  },
+  ]
+
+  function getPowerNet(pinId, pinLabel) {
+    if (POWER_NETS[pinId]) return POWER_NETS[pinId]
+    for (const { re, net } of POWER_LABEL_NETS) {
+      if (re.test(pinLabel)) return net
+    }
+    return null
+  }
+
+  function powerSymbol(cx, cy, side, netName) {
+    const tw  = netName.length * 6 + 8   // text box width
+    const th  = 13                        // text box height
+    const tip = 7                         // arrow tip length
+
+    let path, tx, ty, anchor
+
+    if (side === 'left') {
+      // Arrow points left, box extends further left
+      const bx = cx - tip - tw
+      path = `M ${cx} ${cy} L ${cx-tip} ${cy-th/2} L ${bx} ${cy-th/2} L ${bx} ${cy+th/2} L ${cx-tip} ${cy+th/2} Z`
+      tx = cx - tip - tw/2; ty = cy + 4; anchor = 'middle'
+    } else if (side === 'right') {
+      // Arrow points right, box extends further right
+      const bx = cx + tip + tw
+      path = `M ${cx} ${cy} L ${cx+tip} ${cy-th/2} L ${bx} ${cy-th/2} L ${bx} ${cy+th/2} L ${cx+tip} ${cy+th/2} Z`
+      tx = cx + tip + tw/2; ty = cy + 4; anchor = 'middle'
+    } else if (side === 'top') {
+      const by = cy - tip - th
+      path = `M ${cx} ${cy} L ${cx-th/2} ${cy-tip} L ${cx-tw/2} ${cy-tip} L ${cx-tw/2} ${by} L ${cx+tw/2} ${by} L ${cx+tw/2} ${cy-tip} L ${cx+th/2} ${cy-tip} Z`
+      tx = cx; ty = by + th - 2; anchor = 'middle'
+    } else {
+      const by = cy + tip + th
+      path = `M ${cx} ${cy} L ${cx-th/2} ${cy+tip} L ${cx-tw/2} ${cy+tip} L ${cx-tw/2} ${by} L ${cx+tw/2} ${by} L ${cx+tw/2} ${cy+tip} L ${cx+th/2} ${cy+tip} Z`
+      tx = cx; ty = cy + tip + th - 2; anchor = 'middle'
+    }
+    return { path, tx, ty, anchor }
+  }
 </script>
 
 <svelte:window on:mousemove={onMouseMove} on:mouseup={onMouseUp}/>
@@ -137,46 +212,89 @@
   <!-- MCU pins -->
   {#if mcuData}
     {#each leftPins as pin, i}
-      {@const py  = pinY(i)}
-      {@const col = pinColor(pin.type)}
+      {@const py   = pinY(i)}
+      {@const col  = pinColor(pin.type)}
       {@const used = usedPins.has(pin.id)}
+      {@const isGnd   = pin.type === 'gnd'}
+      {@const netName = getPowerNet(pin.id, pin.label)}
+      {@const isPwr   = !isGnd && pin.type === 'power' && netName}
       <circle class="pin-dot" cx={0} cy={py} r={PIN_R}
         fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
         data-pin={pin.id} data-comp={comp.instanceId}>
         <title>GPIO{pin.num} — {pin.label} ({pin.type}){used ? ' ✓ connected' : ''}</title>
       </circle>
-      <text x={-PIN_R - 3} y={py + 4} class="pin-num" text-anchor="end">{pin.num}</text>
-      <text x={PIN_R + 10} y={py + 4} class="pin-label">{pin.label}</text>
+      {#if isGnd}
+        {@const gs = gndSymbol(0, py, 'left')}
+        <path d={gs.stub} stroke={col} stroke-width="1.5" fill="none" pointer-events="none"/>
+        <path d={gs.bar1} stroke={col} stroke-width="2"   fill="none" pointer-events="none"/>
+        <path d={gs.bar2} stroke={col} stroke-width="1.5" fill="none" pointer-events="none"/>
+        <path d={gs.bar3} stroke={col} stroke-width="1"   fill="none" pointer-events="none"/>
+      {:else if isPwr}
+        {@const ps = powerSymbol(0, py, 'left', netName)}
+        <path d={ps.path} fill="#1a0808" stroke={col} stroke-width="1.2" pointer-events="none"/>
+        <text x={ps.tx} y={ps.ty} text-anchor={ps.anchor} class="pwr-label" fill={col}>{netName}</text>
+      {:else}
+        <text x={-PIN_R - 3} y={py + 4} class="pin-num" text-anchor="end">{pin.num}</text>
+        <text x={PIN_R + 10} y={py + 4} class="pin-label">{pin.label}</text>
+      {/if}
       <circle cx={comp.width * 0.48} cy={py} r="2.5" fill={col} opacity="0.35" pointer-events="none"/>
     {/each}
     {#each rightPins as pin, i}
-      {@const py  = pinY(i)}
-      {@const col = pinColor(pin.type)}
+      {@const py   = pinY(i)}
+      {@const col  = pinColor(pin.type)}
       {@const used = usedPins.has(pin.id)}
+      {@const isGnd   = pin.type === 'gnd'}
+      {@const netName = getPowerNet(pin.id, pin.label)}
+      {@const isPwr   = !isGnd && pin.type === 'power' && netName}
       <circle class="pin-dot" cx={comp.width} cy={py} r={PIN_R}
         fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
         data-pin={pin.id} data-comp={comp.instanceId}>
         <title>GPIO{pin.num} — {pin.label} ({pin.type}){used ? ' ✓ connected' : ''}</title>
       </circle>
-      <text x={comp.width + PIN_R + 3} y={py + 4} class="pin-num">{pin.num}</text>
-      <text x={comp.width - PIN_R - 10} y={py + 4} class="pin-label" text-anchor="end">{pin.label}</text>
+      {#if isGnd}
+        {@const gs = gndSymbol(comp.width, py, 'right')}
+        <path d={gs.stub} stroke={col} stroke-width="1.5" fill="none" pointer-events="none"/>
+        <path d={gs.bar1} stroke={col} stroke-width="2"   fill="none" pointer-events="none"/>
+        <path d={gs.bar2} stroke={col} stroke-width="1.5" fill="none" pointer-events="none"/>
+        <path d={gs.bar3} stroke={col} stroke-width="1"   fill="none" pointer-events="none"/>
+      {:else if isPwr}
+        {@const ps = powerSymbol(comp.width, py, 'right', netName)}
+        <path d={ps.path} fill="#1a0808" stroke={col} stroke-width="1.2" pointer-events="none"/>
+        <text x={ps.tx} y={ps.ty} text-anchor={ps.anchor} class="pwr-label" fill={col}>{netName}</text>
+      {:else}
+        <text x={comp.width + PIN_R + 3} y={py + 4} class="pin-num">{pin.num}</text>
+        <text x={comp.width - PIN_R - 10} y={py + 4} class="pin-label" text-anchor="end">{pin.label}</text>
+      {/if}
       <circle cx={comp.width * 0.52} cy={py} r="2.5" fill={col} opacity="0.35" pointer-events="none"/>
     {/each}
   {:else}
     {#each (comp.pins ?? []) as pin}
-      {@const col = pinColor(pin.type)}
-      {@const used = usedPins.has(pin.id)}
+      {@const col    = pinColor(pin.type)}
+      {@const used   = usedPins.has(pin.id)}
+      {@const isGnd  = pin.type === 'gnd'}
+      {@const netName = getPowerNet(pin.id, pin.label)}
+      {@const isPwr  = !isGnd && pin.type === 'power' && netName}
       {@const W = comp.width}
       {@const H = comp.height}
-      {@const cx = pin.side==='left' ? 0 : pin.side==='right' ? W : W*pin.pos}
+      {@const cx = pin.side==='left' ? 0 : pin.side==='right' ? W : W*(isFinite(pin.pos) ? pin.pos : 0.5)}
       {@const cy = pin.side==='top'  ? 0 : pin.side==='bottom'? H
-                   : TITLE_H + (H - TITLE_H) * pin.pos}
+                   : TITLE_H + (H - TITLE_H) * (isFinite(pin.pos) ? pin.pos : 0.5)}
       <circle class="pin-dot" cx={cx} cy={cy} r={PIN_R}
         fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
         data-pin={pin.id} data-comp={comp.instanceId}>
         <title>{pin.label} ({pin.type}){used ? ' ✓ connected' : ''}</title>
       </circle>
-      {#if pin.side==='left'}
+      {#if isGnd}
+        {@const gs = gndSymbol(cx, cy, pin.side)}
+        <path d={gs.stub} stroke={col} stroke-width="1.5" fill="none" pointer-events="none"/>
+        <path d={gs.bar1} stroke={col} stroke-width="2"   fill="none" pointer-events="none"/>
+        <path d={gs.bar2} stroke={col} stroke-width="1.5" fill="none" pointer-events="none"/>
+        <path d={gs.bar3} stroke={col} stroke-width="1"   fill="none" pointer-events="none"/>
+      {:else if isPwr}
+        {@const ps = powerSymbol(cx, cy, pin.side, netName)}
+        <path d={ps.path} fill="#1a0808" stroke={col} stroke-width="1.2" pointer-events="none"/>
+        <text x={ps.tx} y={ps.ty} text-anchor={ps.anchor} class="pwr-label" fill={col}>{netName}</text>
+      {:else if pin.side==='left'}
         <rect x="0" y={cy-3} width="4" height="6" fill={col} opacity="0.6" pointer-events="none"/>
         <text x={PIN_R+8} y={cy+4} class="pin-label">{pin.label}</text>
       {:else if pin.side==='right'}
@@ -209,4 +327,6 @@
   .comp-prop   { font:11px/1 'Consolas',monospace; fill:#8888aa; pointer-events:none; }
   .pin-dot     { cursor:crosshair; transition:r 0.12s; }
   .pin-dot:hover { r:10; stroke:#fff !important; stroke-width:2 !important; }
+  .gnd-label   { fill:#6b7280; opacity:0.7; }
+  .pwr-label   { font:700 9px/1 'Consolas',monospace; pointer-events:none; }
 </style>

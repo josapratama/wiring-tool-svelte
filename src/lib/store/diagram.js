@@ -67,9 +67,41 @@ function strip(c) {
   const { mcuPinsData: _, ...r } = c;
   return r;
 }
+
+/** Ensure all numeric fields are valid — prevents NaN in SVG attributes.
+ *  Also merges canonical pin `type` from components-db so old saved data
+ *  with missing pin types is always fixed on load. */
+function sanitize(c) {
+  const def = c.id ? (findCompDef(c.id) ?? {}) : {};
+  // Merge pin types from canonical definition
+  let pins = c.pins ?? def.pins ?? [];
+  if (pins.length && def.pins?.length) {
+    const defMap = Object.fromEntries(def.pins.map((p) => [p.id, p]));
+    pins = pins.map((p) => ({
+      ...defMap[p.id], // canonical base
+      ...p, // instance overrides
+      type: p.type ?? defMap[p.id]?.type ?? "passive", // always have type
+    }));
+  }
+  return {
+    ...c,
+    pins,
+    x: isFinite(c.x) ? c.x : 100,
+    y: isFinite(c.y) ? c.y : 100,
+    width: isFinite(c.width) && c.width > 0 ? c.width : (def.width ?? 160),
+    height:
+      isFinite(c.height) && c.height > 0
+        ? c.height
+        : c.isMCU
+          ? mcuHeight(c.id)
+          : (def.height ?? 100),
+  };
+}
+
 function attach(c) {
-  if (c.isMCU && MCU_PINS[c.id]) return { ...c, mcuPinsData: MCU_PINS[c.id] };
-  return c;
+  const s = sanitize(c);
+  if (s.isMCU && MCU_PINS[s.id]) return { ...s, mcuPinsData: MCU_PINS[s.id] };
+  return s;
 }
 
 let _seq = 0;

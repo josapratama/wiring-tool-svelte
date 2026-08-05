@@ -4,6 +4,7 @@ export const TEMPLATES = {
     label: "ESP32-S3 FI Diagnostic",
     icon: "⚡",
     components: [
+      // ── MCU ──────────────────────────────────────────────
       {
         instanceId: "mcu_s3",
         id: "esp32s3-devkit",
@@ -13,6 +14,7 @@ export const TEMPLATES = {
         x: 380,
         y: 40,
       },
+      // ── Displays ─────────────────────────────────────────
       {
         instanceId: "oled_1",
         id: "oled-ssd1306",
@@ -28,6 +30,7 @@ export const TEMPLATES = {
           { id: "SDA", label: "SDA", side: "right", pos: 0.9, type: "i2c" },
         ],
       },
+      // ── Storage ──────────────────────────────────────────
       {
         instanceId: "sd_1",
         id: "sd-card",
@@ -45,12 +48,13 @@ export const TEMPLATES = {
           { id: "CS", label: "CS", side: "bottom", pos: 0.5, type: "spi" },
         ],
       },
+      // ── Communication ────────────────────────────────────
       {
         instanceId: "kline_1",
         id: "kline",
         label: "K-Line (ECU)",
         x: 60,
-        y: 425,
+        y: 430,
         width: 140,
         height: 110,
         pins: [
@@ -61,35 +65,32 @@ export const TEMPLATES = {
             pos: 0.3,
             type: "passive",
           },
+          { id: "VCC", label: "VCC", side: "top", pos: 0.5, type: "power" },
           { id: "RX", label: "RX→ESP", side: "right", pos: 0.35, type: "uart" },
           { id: "TX", label: "TX←ESP", side: "right", pos: 0.65, type: "uart" },
           { id: "GND", label: "GND", side: "bottom", pos: 0.5, type: "gnd" },
         ],
       },
+      // ── Output ───────────────────────────────────────────
       {
         instanceId: "buz_1",
         id: "buzzer",
         label: "Buzzer (G14)",
         x: 60,
-        y: 590,
+        y: 600,
         width: 110,
         height: 90,
         pins: [
-          {
-            id: "+",
-            label: "+  G14",
-            side: "right",
-            pos: 0.4,
-            type: "digital",
-          },
-          { id: "-", label: "−  GND", side: "bottom", pos: 0.5, type: "gnd" },
+          { id: "+", label: "+ G14", side: "right", pos: 0.4, type: "digital" },
+          { id: "-", label: "− GND", side: "bottom", pos: 0.5, type: "gnd" },
         ],
       },
+      // ── Power ─────────────────────────────────────────────
       {
         instanceId: "batt_1",
         id: "battery-12v",
         label: "Aki Motor 12V",
-        x: 690,
+        x: 720,
         y: 40,
         width: 140,
         height: 100,
@@ -108,8 +109,8 @@ export const TEMPLATES = {
         instanceId: "buck_1",
         id: "buck-conv",
         label: "LM2596 → 5V",
-        x: 690,
-        y: 190,
+        x: 720,
+        y: 195,
         width: 150,
         height: 110,
         pins: [
@@ -143,12 +144,17 @@ export const TEMPLATES = {
           },
         ],
       },
+      // ── Optocouplers ──────────────────────────────────────
+      // PC817 wiring:
+      //   Input  side: Anode(+) ← 1kΩ ← ECU signal, Cathode(−) → GND
+      //   Output side: Collector ─ 10kΩ pull-up → 3.3V, Emitter → GND
+      //                Collector also → ESP32 digital input (active-low)
       {
         instanceId: "opto_mil",
         id: "opto-pc817",
         label: "Opto — MIL (G4)",
-        x: 690,
-        y: 355,
+        x: 720,
+        y: 365,
         width: 150,
         height: 110,
         pins: [
@@ -173,9 +179,9 @@ export const TEMPLATES = {
       {
         instanceId: "opto_ign",
         id: "opto-pc817",
-        label: "Opto — IGN RPM (G6)",
-        x: 690,
-        y: 520,
+        label: "Opto — IGN/RPM (G6)",
+        x: 720,
+        y: 535,
         width: 150,
         height: 110,
         pins: [
@@ -197,12 +203,42 @@ export const TEMPLATES = {
           { id: "E", label: "Emitter", side: "right", pos: 0.65, type: "gnd" },
         ],
       },
+      // ── Pull-up resistors for Collector pins ──────────────
+      {
+        instanceId: "r_mil",
+        id: "resistor",
+        label: "R-MIL 10kΩ",
+        x: 920,
+        y: 365,
+        width: 100,
+        height: 70,
+        props: { value: "10kΩ" },
+        pins: [
+          { id: "1", label: "C", side: "left", pos: 0.5, type: "passive" },
+          { id: "2", label: "3.3V", side: "right", pos: 0.5, type: "power" },
+        ],
+      },
+      {
+        instanceId: "r_ign",
+        id: "resistor",
+        label: "R-IGN 10kΩ",
+        x: 920,
+        y: 535,
+        width: 100,
+        height: 70,
+        props: { value: "10kΩ" },
+        pins: [
+          { id: "1", label: "C", side: "left", pos: 0.5, type: "passive" },
+          { id: "2", label: "3.3V", side: "right", pos: 0.5, type: "power" },
+        ],
+      },
+      // ── Analog input divider ──────────────────────────────
       {
         instanceId: "vdiv_1",
         id: "vdivider",
         label: "VDiv Batt → G1",
-        x: 690,
-        y: 685,
+        x: 720,
+        y: 705,
         width: 140,
         height: 110,
         pins: [
@@ -224,7 +260,9 @@ export const TEMPLATES = {
         ],
       },
     ],
+
     wires: [
+      // ── I2C: OLED ─────────────────────────────────────────
       {
         id: "w_sda",
         fromComp: "oled_1",
@@ -243,6 +281,7 @@ export const TEMPLATES = {
         color: "#c084fc",
         label: "SCL",
       },
+      // ── SPI: MicroSD ──────────────────────────────────────
       {
         id: "w_mosi",
         fromComp: "sd_1",
@@ -279,6 +318,7 @@ export const TEMPLATES = {
         color: "#0284c7",
         label: "CS",
       },
+      // ── UART: K-Line ──────────────────────────────────────
       {
         id: "w_krx",
         fromComp: "kline_1",
@@ -297,6 +337,7 @@ export const TEMPLATES = {
         color: "#10b981",
         label: "K-TX",
       },
+      // ── Buzzer ────────────────────────────────────────────
       {
         id: "w_buz",
         fromComp: "buz_1",
@@ -306,6 +347,7 @@ export const TEMPLATES = {
         color: "#fb923c",
         label: "Buzzer",
       },
+      // ── Opto MIL: Collector → G4 (active-low input) ──────
       {
         id: "w_mil",
         fromComp: "opto_mil",
@@ -315,6 +357,7 @@ export const TEMPLATES = {
         color: "#facc15",
         label: "MIL",
       },
+      // ── Opto IGN: Collector → G6 ─────────────────────────
       {
         id: "w_ign",
         fromComp: "opto_ign",
@@ -324,6 +367,42 @@ export const TEMPLATES = {
         color: "#fde047",
         label: "IGN/RPM",
       },
+      // ── Pull-up: Collector → R pin-1 → R pin-2 → 3.3V ───
+      // w_rmil_c / w_rign_c: Collector (passive) → R pin-1 (passive) → shown as wire
+      // w_rmil_v / w_rign_v: R pin-2 (power) → MCU V3V3 (power) → suppressed, shown as ⊕3V3 symbol
+      {
+        id: "w_rmil_c",
+        fromComp: "opto_mil",
+        fromPin: "C",
+        toComp: "r_mil",
+        toPin: "1",
+        color: "#facc15",
+      },
+      {
+        id: "w_rmil_v",
+        fromComp: "r_mil",
+        fromPin: "2",
+        toComp: "mcu_s3",
+        toPin: "V3V3",
+        color: "#ef4444",
+      },
+      {
+        id: "w_rign_c",
+        fromComp: "opto_ign",
+        fromPin: "C",
+        toComp: "r_ign",
+        toPin: "1",
+        color: "#fde047",
+      },
+      {
+        id: "w_rign_v",
+        fromComp: "r_ign",
+        fromPin: "2",
+        toComp: "mcu_s3",
+        toPin: "V3V3",
+        color: "#ef4444",
+      },
+      // ── ADC: Batt voltage divider → G1 ───────────────────
       {
         id: "w_adc1",
         fromComp: "vdiv_1",
@@ -333,6 +412,7 @@ export const TEMPLATES = {
         color: "#f59e0b",
         label: "Batt ADC",
       },
+      // ── Power: 12V rail ───────────────────────────────────
       {
         id: "w_12v",
         fromComp: "batt_1",
@@ -341,6 +421,40 @@ export const TEMPLATES = {
         toPin: "IN+",
         color: "#ef4444",
         label: "+12V",
+      },
+      // 12V → VDiv input (kept in netlist, suppressed visually — both are power type)
+      {
+        id: "w_12v_vdiv",
+        fromComp: "batt_1",
+        fromPin: "+",
+        toComp: "vdiv_1",
+        toPin: "IN",
+        color: "#ef4444",
+      },
+      // ── Power: 5V → components (suppressed visually, shown as ⊕5V net labels) ──
+      {
+        id: "w_5v_oled",
+        fromComp: "buck_1",
+        fromPin: "OUT+",
+        toComp: "oled_1",
+        toPin: "VCC",
+        color: "#ef4444",
+      },
+      {
+        id: "w_5v_sd",
+        fromComp: "buck_1",
+        fromPin: "OUT+",
+        toComp: "sd_1",
+        toPin: "VCC",
+        color: "#ef4444",
+      },
+      {
+        id: "w_5v_kl",
+        fromComp: "buck_1",
+        fromPin: "OUT+",
+        toComp: "kline_1",
+        toPin: "VCC",
+        color: "#ef4444",
       },
     ],
   },

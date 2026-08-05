@@ -38,6 +38,14 @@
   let zoomPct = 100
   let svgEl, containerEl
 
+  // Safe viewport setters — prevent NaN from propagating into SVG attributes
+  function setViewport(x, y, s) {
+    vx     = isFinite(x) ? x : 0
+    vy     = isFinite(y) ? y : 0
+    vscale = isFinite(s) && s > 0 ? s : 1
+    zoomPct = Math.round(vscale * 100)
+  }
+
   // ── BUG FIX #4: canvasW/H reactive via ResizeObserver ──
   let canvasW = 800, canvasH = 600
   let _ro = null
@@ -92,6 +100,9 @@
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       panning = true
       panStart = { x: e.clientX - vx, y: e.clientY - vy }
+      // Attach move/up to window so panning works even when mouse leaves canvas
+      window.addEventListener('mousemove', onWindowMouseMove)
+      window.addEventListener('mouseup',   onWindowMouseUp)
       e.preventDefault()
       e.stopPropagation()
       return  // ← critical: prevents selection/label logic
@@ -153,11 +164,7 @@
   let statusX = 0, statusY = 0
 
   function onMouseMove(e) {
-    if (panning && panStart) {
-      vx = e.clientX - panStart.x
-      vy = e.clientY - panStart.y
-      return
-    }
+    if (panning) return  // panning handled by onWindowMouseMove
 
     const w = s2w(e.clientX, e.clientY)
     cursorWorld = w
@@ -180,13 +187,26 @@
   }
 
   function onMouseUp(e) {
-    if (panning) { panning = false; panStart = null; return }
+    if (panning) return  // handled by onWindowMouseUp
     if (selBox?.active) finishRubberBand()
+  }
+
+  // Window-level mouse move — only active during pan to track mouse outside canvas
+  function onWindowMouseMove(e) {
+    if (!panning || !panStart) return
+    const nx = e.clientX - panStart.x
+    const ny = e.clientY - panStart.y
+    if (isFinite(nx) && isFinite(ny)) { vx = nx; vy = ny }
   }
 
   // BUG FIX #3: reset selBox if mouse leaves the window
   function onWindowMouseUp() {
-    if (panning) { panning = false; panStart = null }
+    if (panning) {
+      panning = false
+      panStart = null
+      window.removeEventListener('mousemove', onWindowMouseMove)
+      window.removeEventListener('mouseup',   onWindowMouseUp)
+    }
     if (selBox?.active) { selBox = null }
   }
 
@@ -197,10 +217,12 @@
     const mx = e.clientX - rect.left, my = e.clientY - rect.top
     const f  = e.deltaY < 0 ? 1.1 : 0.909
     const ns = Math.min(4, Math.max(0.12, vscale * f))
-    vx = mx - (mx - vx) * (ns / vscale)
-    vy = my - (my - vy) * (ns / vscale)
-    vscale = ns
-    zoomPct = Math.round(ns * 100)
+    if (!isFinite(ns) || ns <= 0) return
+    setViewport(
+      mx - (mx - vx) * (ns / vscale),
+      my - (my - vy) * (ns / vscale),
+      ns
+    )
   }
 
   // ── Coordinate helpers ────────────────────────────────
@@ -214,26 +236,40 @@
   function zoomOut() { zoomBy(0.833) }
   export function fitView() {
     const cs = $components
-    if (!cs.length) { vx=120; vy=60; vscale=1; zoomPct=100; return }
+    if (!cs.length) { setViewport(120, 60, 1); return }
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity
     cs.forEach(c => {
       minX=Math.min(minX,c.x); minY=Math.min(minY,c.y)
       maxX=Math.max(maxX,c.x+c.width); maxY=Math.max(maxY,c.y+c.height)
     })
     if (!containerEl) return
-    const pad=80, cw=containerEl.offsetWidth, ch=containerEl.offsetHeight
-    const sx=(cw-pad*2)/(maxX-minX+1), sy=(ch-pad*2)/(maxY-minY+1)
-    vscale = Math.min(2, Math.max(0.15, Math.min(sx,sy)))
-    vx = (cw - (maxX+minX)*vscale)/2
-    vy = (ch - (maxY+minY)*vscale)/2
-    zoomPct = Math.round(vscale*100)
+    const cw = containerEl.offsetWidth  || canvasW
+    const ch = containerEl.offsetHeight || canvasH
+    if (!cw || !ch) return   // not rendered yet
+    const pad=80
+    const sw = maxX - minX + 1
+    const sh = maxY - minY + 1
+    if (sw <= 0 || sh <= 0) return
+    const s = Math.min(2, Math.max(0.15, Math.min((cw-pad*2)/sw, (ch-pad*2)/sh)))
+    setViewport(
+      (cw - (maxX + minX) * s) / 2,
+      (ch - (maxY + minY) * s) / 2,
+      s
+    )
   }
+
   function zoomBy(f) {
     if (!containerEl) return
-    const cx=containerEl.offsetWidth/2, cy=containerEl.offsetHeight/2
-    const ns=Math.min(4,Math.max(0.12,vscale*f))
-    vx=cx-(cx-vx)*(ns/vscale); vy=cy-(cy-vy)*(ns/vscale)
-    vscale=ns; zoomPct=Math.round(ns*100)
+    const cw = containerEl.offsetWidth  || canvasW
+    const ch = containerEl.offsetHeight || canvasH
+    if (!cw || !ch) return
+    const ns = Math.min(4, Math.max(0.12, vscale * f))
+    if (!isFinite(ns) || ns <= 0) return
+    setViewport(
+      cw/2 - (cw/2 - vx) * (ns / vscale),
+      ch/2 - (ch/2 - vy) * (ns / vscale),
+      ns
+    )
   }
 
   // ── Grid ──────────────────────────────────────────────
@@ -244,11 +280,11 @@
   let showMinimap = true
   function toggleMinimap() { showMinimap = !showMinimap }
 
-  // BUG FIX: receive minipan event directly from Minimap component
   function onMinipan(e) {
     const { wx, wy } = e.detail
-    vx = canvasW/2  - wx * vscale
-    vy = canvasH/2  - wy * vscale
+    if (!isFinite(wx) || !isFinite(wy)) return
+    vx = canvasW/2 - wx * vscale
+    vy = canvasH/2 - wy * vscale
   }
 
   // ── Drop from sidebar ─────────────────────────────────
@@ -474,12 +510,18 @@
       maxX=Math.max(maxX,c.x+c.width); maxY=Math.max(maxY,c.y+c.height)
     })
     if (!containerEl) return
-    const pad=80, cw=containerEl.offsetWidth, ch=containerEl.offsetHeight
-    const sx=(cw-pad*2)/(maxX-minX+1), sy=(ch-pad*2)/(maxY-minY+1)
-    vscale = Math.min(2, Math.max(0.15, Math.min(sx,sy)))
-    vx = (cw - (maxX+minX)*vscale)/2
-    vy = (ch - (maxY+minY)*vscale)/2
-    zoomPct = Math.round(vscale*100)
+    const cw = containerEl.offsetWidth  || canvasW
+    const ch = containerEl.offsetHeight || canvasH
+    if (!cw || !ch) return
+    const pad=80
+    const sw = maxX - minX + 1, sh = maxY - minY + 1
+    if (sw <= 0 || sh <= 0) return
+    const s = Math.min(2, Math.max(0.15, Math.min((cw-pad*2)/sw, (ch-pad*2)/sh)))
+    setViewport(
+      (cw - (maxX + minX) * s) / 2,
+      (ch - (maxY + minY) * s) / 2,
+      s
+    )
   }
 
   // ── SVG drag/drop ─────────────────────────────────────
@@ -540,7 +582,7 @@
     }
 
     containerEl.addEventListener('wheel',       onWheel,            { passive: false })
-    containerEl.addEventListener('mousedown',   onMouseDown,        { passive: true  })
+    containerEl.addEventListener('mousedown',   onMouseDown,        { passive: false })
     containerEl.addEventListener('mousemove',   onMouseMove,        { passive: true  })
     containerEl.addEventListener('mouseup',     onMouseUp,          { passive: true  })
     containerEl.addEventListener('contextmenu', onCanvasContextMenu)
@@ -560,6 +602,10 @@
       containerEl.removeEventListener('drop',        onDrop)
     }
   })
+  // ── Safe viewport values for SVG (guard against NaN) ─────────
+  $: svgVx     = isFinite(vx)     ? vx     : 0
+  $: svgVy     = isFinite(vy)     ? vy     : 0
+  $: svgVscale = isFinite(vscale) && vscale > 0 ? vscale : 1
 </script>
 
 <!-- Svelte 5: onkeydown / onmouseup (no colon) -->
@@ -582,11 +628,11 @@
   >
     <defs>
       <pattern id="grid-sm" width="20" height="20" patternUnits="userSpaceOnUse"
-        patternTransform="translate({vx},{vy}) scale({vscale})">
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1c1c38" stroke-width="0.5"/>
       </pattern>
       <pattern id="grid-lg" width="100" height="100" patternUnits="userSpaceOnUse"
-        patternTransform="translate({vx},{vy}) scale({vscale})">
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
         <rect width="100" height="100" fill="url(#grid-sm)"/>
         <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#28284a" stroke-width="1"/>
       </pattern>
@@ -603,7 +649,7 @@
       <rect id="grid-bg" width="100%" height="100%" fill="#0d0d1a"/>
     {/if}
 
-    <g transform="translate({vx},{vy}) scale({vscale})">
+    <g transform="translate({svgVx},{svgVy}) scale({svgVscale})">
       <!-- Wires layer -->
       <WireLayer {previewData} {wireColor} snapTargetPin={snapTarget} {highlightedWireIds}/>
 
@@ -650,7 +696,7 @@
       {#each $components as comp (comp.instanceId)}
         <CompNode
           {comp}
-          scale={vscale}
+          scale={svgVscale}
           selected={$selection?.id === comp.instanceId && $selection?.type === 'component'}
           inMultiSel={$multiSelection.some(s => s.id === comp.instanceId)}
           usedPins={usedPinsFor(comp.instanceId)}
@@ -669,8 +715,8 @@
           x={selRect.x} y={selRect.y}
           width={selRect.w} height={selRect.h}
           fill="rgba(79,156,249,0.06)"
-          stroke="#4f9cf9" stroke-width={1/vscale}
-          stroke-dasharray="{4/vscale},{3/vscale}"
+          stroke="#4f9cf9" stroke-width={1/svgVscale}
+          stroke-dasharray="{4/svgVscale},{3/svgVscale}"
           pointer-events="none"
         />
       {/if}
