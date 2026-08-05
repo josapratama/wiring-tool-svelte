@@ -532,30 +532,32 @@
   }
 
   onMount(() => {
-    // ── Attach canvas events manually ──────────────────────────────────
-    // Svelte 5 compiles on:wheel as passive by default — must use
-    // addEventListener with { passive: false } so e.preventDefault() works.
-    // We also attach mouse events here to keep everything in one place.
-    const el = containerEl
+    // bind:this is guaranteed set before onMount in Svelte 5 legacy mode.
+    // We still guard with a check just in case.
+    if (!containerEl) {
+      console.error('[Canvas] containerEl not ready in onMount')
+      return
+    }
 
-    el.addEventListener('wheel',      onWheel,           { passive: false })
-    el.addEventListener('mousedown',  onMouseDown,       { passive: true  })
-    el.addEventListener('mousemove',  onMouseMove,       { passive: true  })
-    el.addEventListener('mouseup',    onMouseUp,         { passive: true  })
-    el.addEventListener('contextmenu',onCanvasContextMenu)
-    el.addEventListener('dragover',   onDragOver)
-    el.addEventListener('drop',       onDrop)
+    containerEl.addEventListener('wheel',       onWheel,            { passive: false })
+    containerEl.addEventListener('mousedown',   onMouseDown,        { passive: true  })
+    containerEl.addEventListener('mousemove',   onMouseMove,        { passive: true  })
+    containerEl.addEventListener('mouseup',     onMouseUp,          { passive: true  })
+    containerEl.addEventListener('contextmenu', onCanvasContextMenu)
+    containerEl.addEventListener('dragover',    onDragOver)
+    containerEl.addEventListener('drop',        onDrop)
 
     setTimeout(fitView, 150)
 
+    // Svelte calls the returned function on component destroy
     return () => {
-      el.removeEventListener('wheel',      onWheel)
-      el.removeEventListener('mousedown',  onMouseDown)
-      el.removeEventListener('mousemove',  onMouseMove)
-      el.removeEventListener('mouseup',    onMouseUp)
-      el.removeEventListener('contextmenu',onCanvasContextMenu)
-      el.removeEventListener('dragover',   onDragOver)
-      el.removeEventListener('drop',       onDrop)
+      containerEl.removeEventListener('wheel',       onWheel)
+      containerEl.removeEventListener('mousedown',   onMouseDown)
+      containerEl.removeEventListener('mousemove',   onMouseMove)
+      containerEl.removeEventListener('mouseup',     onMouseUp)
+      containerEl.removeEventListener('contextmenu', onCanvasContextMenu)
+      containerEl.removeEventListener('dragover',    onDragOver)
+      containerEl.removeEventListener('drop',        onDrop)
     }
   })
 </script>
