@@ -1,0 +1,761 @@
+<script>
+  /**
+   * Canvas v2 — all bugs fixed, all features implemented:
+   * Bug fixes: #1 scale prop, #2 unified formula, #3 dup wire,
+   *            #4 history reset, #5 path midpoint, #6 alt+pan
+   * Features: multi-select, duplicate, auto-label, snap-to-pin,
+   *           minimap, context menu, arrow nudge
+   */
+  import { onMount } from 'svelte'
+  import CompNode    from './CompNode.svelte'
+  import WireLayer   from './WireLayer.svelte'
+  import Minimap     from './Minimap.svelte'
+  import ContextMenu from './ContextMenu.svelte'
+
+  import {
+    components, wires, labels, selection, multiSelection, activeTool,
+    addComponent, addWire, addLabel, removeLabel, removeWire, removeComponent,
+    updateLabel, updateComponent, updateWire, duplicateComponent, pushHistory,
+    getConnectedWireIds, getUsedPins
+  } from '$lib/store/diagram.js'
+
+  import { findCompDef }                     from '$lib/data/components-db.js'
+  import { pinPos, snap, nearestPin, allPinPositions } from '$lib/engine/geometry.js'
+
+  // ── Public API exposed to parent via bind:api ─────────
+  // Parent does: <Canvas bind:api={canvasRef}/>
+  // then calls:  canvasRef?.fitView()
+  export let api = {}
+
+  $: Object.assign(api, {
+    fitView, zoomIn, zoomOut, zoomToSelection,
+    toggleGrid, toggleMinimap,
+    handleDrop, setWireColor, cancelWire
+  })
+
+  // ── Viewport ──────────────────────────────────────────
+  let vx = 0, vy = 0, vscale = 1
+  let zoomPct = 100
+  let svgEl, containerEl
+
+  // ── BUG FIX #4: canvasW/H reactive via ResizeObserver ──
+  let canvasW = 800, canvasH = 600
+  let _ro = null
+  function attachResizeObserver(el) {
+    if (!el) return
+    if (_ro) _ro.disconnect()
+    _ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        canvasW = entry.contentRect.width
+        canvasH = entry.contentRect.height
+      }
+    })
+    _ro.observe(el)
+    canvasW = el.offsetWidth
+    canvasH = el.offsetHeight
+  }
+  $: if (containerEl) attachResizeObserver(containerEl)
+
+  // ── Wire drawing ──────────────────────────────────────
+  let wireStart    = null   // { comp, pinId }
+  let wireColor    = '#ef4444'
+  let cursorWorld  = { x: 0, y: 0 }
+  let snapTarget   = null   // { comp, pinId, pos } — Feature 4
+
+  $: previewData = wireStart
+    ? { fromComp: wireStart.comp, fromPinId: wireStart.pinId,
+        cursorX: snapTarget ? snapTarget.pos.x : cursorWorld.x,
+        cursorY: snapTarget ? snapTarget.pos.y : cursorWorld.y }
+    : null
+
+  // Auto-label map — Feature 3
+  const AUTO_LABELS = {
+    SDA:'SDA', SCL:'SCL', MOSI:'MOSI', MISO:'MISO', SCK:'SCK',
+    CS:'CS', TX:'TX', RX:'RX', TX0:'TX', RX0:'RX',
+    VCC:'VCC', GND:'GND', '+':'VCC', '-':'GND',
+    G1:'Batt', G2:'TPS', G3:'Temp', G4:'MIL', G5:'STR',
+    G6:'IGN', G7:'INJ', G14:'Buzzer', G16:'K-RX', G17:'K-TX',
+    G35:'MOSI', G36:'SCK', G37:'MISO', G38:'CS',
+    DATA:'DATA', SIG:'Signal', IN:'IN', OUT:'OUT',
+    TRIG:'TRIG', ECHO:'ECHO',
+  }
+
+  function autoLabel(fromPin, toPin) {
+    return AUTO_LABELS[fromPin] ?? AUTO_LABELS[toPin] ?? fromPin ?? ''
+  }
+
+  // ── Pan (Bug Fix #6: early return prevents selection) ──
+  let panning = false, panStart = null
+
+  function onMouseDown(e) {
+    // BUG FIX #6: handle pan FIRST, return before tool logic
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      panning = true
+      panStart = { x: e.clientX - vx, y: e.clientY - vy }
+      e.preventDefault()
+      e.stopPropagation()
+      return  // ← critical: prevents selection/label logic
+    }
+
+    if (e.button === 2) return  // right-click handled by contextmenu
+
+    if (e.button === 0) {
+      const onBg = e.target === svgEl || e.target.id === 'grid-bg' || e.target === containerEl
+      if (!onBg) return
+
+      if ($activeTool === 'label') {
+        const w = s2w(e.clientX, e.clientY)
+        pushHistory()
+        const lbl = addLabel({ text:'Label', x:snap(w.x), y:snap(w.y), fontSize:14, color:'#facc15' })
+        selection.set({ id:lbl.id, type:'label' })
+        return
+      }
+
+      if ($activeTool === 'select') {
+        // Start rubber-band selection
+        const w = s2w(e.clientX, e.clientY)
+        selBox = { sx: w.x, sy: w.y, ex: w.x, ey: w.y, active: true }
+        if (!e.shiftKey) { selection.set(null); multiSelection.set([]) }
+        return
+      }
+
+      if ($activeTool === 'wire') {
+        wireStart = null  // cancel if clicking empty space
+      }
+    }
+  }
+
+  // ── Rubber-band selection box (Feature 1) ─────────────
+  let selBox = null   // { sx,sy,ex,ey,active }
+
+  $: selRect = selBox ? {
+    x: Math.min(selBox.sx, selBox.ex),
+    y: Math.min(selBox.sy, selBox.ey),
+    w: Math.abs(selBox.ex - selBox.sx),
+    h: Math.abs(selBox.ey - selBox.sy),
+  } : null
+
+  function finishRubberBand() {
+    if (!selBox || !selBox.active) { selBox = null; return }
+    const r = selRect
+    if (r.w > 4 && r.h > 4) {
+      const hit = $components.filter(c =>
+        c.x < r.x + r.w && c.x + c.width  > r.x &&
+        c.y < r.y + r.h && c.y + c.height > r.y
+      )
+      multiSelection.set(hit.map(c => ({ id: c.instanceId, type:'component' })))
+      if (hit.length === 1) selection.set({ id:hit[0].instanceId, type:'component' })
+    }
+    selBox = null
+  }
+
+  // ── Mouse move ────────────────────────────────────────
+  let statusX = 0, statusY = 0
+
+  function onMouseMove(e) {
+    if (panning && panStart) {
+      vx = e.clientX - panStart.x
+      vy = e.clientY - panStart.y
+      return
+    }
+
+    const w = s2w(e.clientX, e.clientY)
+    cursorWorld = w
+    statusX = Math.round(w.x); statusY = Math.round(w.y)
+
+    // Rubber-band update
+    if (selBox?.active) {
+      selBox = { ...selBox, ex: w.x, ey: w.y }
+      return
+    }
+
+    // Feature 4: snap-to-pin while drawing wire
+    if (wireStart) {
+      const near = nearestPin($components, w.x, w.y, 32,
+        wireStart.comp.instanceId, wireStart.pinId)
+      snapTarget = near ?? null
+    } else {
+      snapTarget = null
+    }
+  }
+
+  function onMouseUp(e) {
+    if (panning) { panning = false; panStart = null; return }
+    if (selBox?.active) finishRubberBand()
+  }
+
+  // BUG FIX #3: reset selBox if mouse leaves the window
+  function onWindowMouseUp() {
+    if (panning) { panning = false; panStart = null }
+    if (selBox?.active) { selBox = null }
+  }
+
+  // ── Wheel zoom ────────────────────────────────────────
+  function onWheel(e) {
+    e.preventDefault()
+    const rect = containerEl.getBoundingClientRect()
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top
+    const f  = e.deltaY < 0 ? 1.1 : 0.909
+    const ns = Math.min(4, Math.max(0.12, vscale * f))
+    vx = mx - (mx - vx) * (ns / vscale)
+    vy = my - (my - vy) * (ns / vscale)
+    vscale = ns
+    zoomPct = Math.round(ns * 100)
+  }
+
+  // ── Coordinate helpers ────────────────────────────────
+  function s2w(sx, sy) {
+    const r = containerEl?.getBoundingClientRect() ?? { left:0, top:0 }
+    return { x:(sx - r.left - vx)/vscale, y:(sy - r.top - vy)/vscale }
+  }
+
+  // ── Zoom ──────────────────────────────────────────────
+  function zoomIn()  { zoomBy(1.2)   }
+  function zoomOut() { zoomBy(0.833) }
+  export function fitView() {
+    const cs = $components
+    if (!cs.length) { vx=120; vy=60; vscale=1; zoomPct=100; return }
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity
+    cs.forEach(c => {
+      minX=Math.min(minX,c.x); minY=Math.min(minY,c.y)
+      maxX=Math.max(maxX,c.x+c.width); maxY=Math.max(maxY,c.y+c.height)
+    })
+    if (!containerEl) return
+    const pad=80, cw=containerEl.offsetWidth, ch=containerEl.offsetHeight
+    const sx=(cw-pad*2)/(maxX-minX+1), sy=(ch-pad*2)/(maxY-minY+1)
+    vscale = Math.min(2, Math.max(0.15, Math.min(sx,sy)))
+    vx = (cw - (maxX+minX)*vscale)/2
+    vy = (ch - (maxY+minY)*vscale)/2
+    zoomPct = Math.round(vscale*100)
+  }
+  function zoomBy(f) {
+    if (!containerEl) return
+    const cx=containerEl.offsetWidth/2, cy=containerEl.offsetHeight/2
+    const ns=Math.min(4,Math.max(0.12,vscale*f))
+    vx=cx-(cx-vx)*(ns/vscale); vy=cy-(cy-vy)*(ns/vscale)
+    vscale=ns; zoomPct=Math.round(ns*100)
+  }
+
+  // ── Grid ──────────────────────────────────────────────
+  let showGrid = true
+  function toggleGrid() { showGrid = !showGrid }
+
+  // ── Minimap ───────────────────────────────────────────
+  let showMinimap = true
+  function toggleMinimap() { showMinimap = !showMinimap }
+
+  // BUG FIX: receive minipan event directly from Minimap component
+  function onMinipan(e) {
+    const { wx, wy } = e.detail
+    vx = canvasW/2  - wx * vscale
+    vy = canvasH/2  - wy * vscale
+  }
+
+  // ── Drop from sidebar ─────────────────────────────────
+  function handleDrop(compId, clientX, clientY) {
+    const def = findCompDef(compId); if (!def) return
+    let wx2, wy2
+    if (clientX != null) {
+      const w = s2w(clientX, clientY)
+      wx2 = snap(w.x - (def.width ?? 120)/2)
+      wy2 = snap(w.y - (def.height > 0 ? def.height/2 : 60))
+    } else {
+      wx2 = snap(120 + Math.random()*80)
+      wy2 = snap(100 + Math.random()*80)
+    }
+    pushHistory()
+    addComponent({ ...def, x:wx2, y:wy2 })
+  }
+
+  function setWireColor(c) { wireColor = c }
+
+  // ── Pin click → wire (Feature 3: auto-label) ──────────
+  function onPinClick({ detail: { comp, pinId } }) {
+    if ($activeTool !== 'wire') return
+    if (!wireStart) {
+      wireStart = { comp, pinId }
+    } else {
+      const sameComp = wireStart.comp.instanceId === comp.instanceId
+      const samePin  = wireStart.pinId === pinId
+      if (sameComp && samePin) { wireStart = null; return }
+
+      pushHistory()
+      const label = autoLabel(wireStart.pinId, pinId)   // Feature 3
+      const result = addWire({
+        fromComp: wireStart.comp.instanceId, fromPin: wireStart.pinId,
+        toComp:   comp.instanceId,           toPin:   pinId,
+        color: wireColor, label
+      })
+
+      if (result?.duplicate) {
+        flashStatus('⚠ Wire already exists between these pins', '#f59e0b')
+      }
+      wireStart = null; snapTarget = null
+    }
+  }
+
+  // ── Multi-select node click (Feature 1) ───────────────
+  function onSelectNode({ detail: { comp, shift } }) {
+    if (shift) {
+      const ms  = $multiSelection
+      const idx = ms.findIndex(s => s.id === comp.instanceId)
+      if (idx >= 0) {
+        multiSelection.set(ms.filter((_,i) => i !== idx))
+      } else {
+        multiSelection.set([...ms, { id:comp.instanceId, type:'component' }])
+      }
+    } else {
+      selection.set({ id:comp.instanceId, type:'component' })
+      multiSelection.set([])
+    }
+  }
+
+  // ── Multi-drag (Feature 1) ────────────────────────────
+  // BUG FIX #1: track origins at drag-start to avoid double-move
+  let multiDragOrigins = {}
+
+  function onNodeDragStart({ detail: { instanceId } }) {
+    // Snapshot world positions of all selected nodes at drag-start
+    const ms = $multiSelection
+    if (ms.length <= 1) return
+    multiDragOrigins = {}
+    ms.forEach(s => {
+      const c = $components.find(c => c.instanceId === s.id)
+      if (c) multiDragOrigins[s.id] = { x: c.x, y: c.y }
+    })
+  }
+
+  function onNodeDragged({ detail: { instanceId, nx, ny } }) {
+    // instanceId was already moved by CompNode; move the others by same world delta
+    const ms = $multiSelection
+    if (ms.length <= 1) return
+    if (!ms.find(s => s.id === instanceId)) return
+    const origin = multiDragOrigins[instanceId]
+    if (!origin) return
+    // Compute the actual delta from origin
+    const dx = nx - origin.x
+    const dy = ny - origin.y
+    ms.forEach(s => {
+      if (s.id === instanceId) return  // already moved by CompNode itself
+      const orig = multiDragOrigins[s.id]
+      if (!orig) return
+      updateComponent(s.id, { x: snap(orig.x + dx), y: snap(orig.y + dy) })
+    })
+  }
+
+  // ── Context menu (Feature 8) ──────────────────────────
+  let ctxMenu = null   // { x, y, type, target }
+
+  function onCompContextMenu({ detail: { comp, e } }) {
+    ctxMenu = { x: e.clientX, y: e.clientY, type:'component', target: comp }
+  }
+
+  function onCanvasContextMenu(e) {
+    e.preventDefault()
+    // Check if right-clicking a wire
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const wireEl = el?.closest('[data-wire-id]') ?? el?.closest('.wire-grp')
+    if (wireEl) {
+      const wireId = wireEl.dataset.wireId
+      const wire   = $wires.find(w => w.id === wireId)
+      if (wire) { ctxMenu = { x:e.clientX, y:e.clientY, type:'wire', target:wire }; return }
+    }
+    ctxMenu = { x: e.clientX, y: e.clientY, type:'canvas', target: null }
+  }
+
+  function onCtxAction(e) {
+    const action = e.detail
+    const saved  = ctxMenu          // save before clearing
+    ctxMenu = null
+
+    if (!saved) return
+    const t = saved.target
+
+    if (action === 'delete') {
+      if (t?.instanceId) removeComponent(t.instanceId)
+      else if (t?.id)    removeWire(t.id)
+    }
+    if (action === 'duplicate' && t?.instanceId) {
+      pushHistory(); duplicateComponent(t.instanceId)
+    }
+    if (action === 'rename' && t?.instanceId) {
+      const newLabel = prompt('Rename component:', t.label)
+      if (newLabel !== null) updateComponent(t.instanceId, { label: newLabel })
+    }
+    if (action === 'editLabel' && t?.id) {
+      const newLabel = prompt('Wire label:', t.label ?? '')
+      if (newLabel !== null) updateWire(t.id, { label: newLabel })
+    }
+    if (action === 'fitView')    fitView()
+    if (action === 'toggleGrid') toggleGrid()
+    if (action === 'addLabel')   activeTool.set('label')
+    if (action === 'clearSel') {
+      selection.set(null); multiSelection.set([])
+    }
+    if (action === 'connections' && t?.instanceId) {
+      const conns = $wires.filter(w => w.fromComp===t.instanceId||w.toComp===t.instanceId)
+      alert(`${conns.length} connection(s):\n` +
+        conns.map(w=>`  ${w.fromPin} → ${w.toPin} (${w.label||'no label'})`).join('\n'))
+    }
+    // BUG FIX #2: handle wireColor action
+    if (action === 'wireColor' && t?.id) {
+      // Select the wire first so PropertiesPanel shows the color picker
+      selection.set({ id: t.id, type: 'wire' })
+    }
+  }
+
+  // ── Cancel wire ───────────────────────────────────────
+  function cancelWire() { wireStart = null; snapTarget = null }
+
+  // ── Feature #2: Connection highlight ──────────────────
+  // When a component is selected, highlight its connected wires
+  $: highlightedWireIds = (() => {
+    if ($selection?.type === 'component') return new Set(getConnectedWireIds($selection.id))
+    return new Set()
+  })()
+
+  // ── Feature #5: Used pins per component ───────────────
+  // Passed to CompNode as a Set of used pinIds
+  function usedPinsFor(instanceId) { return getUsedPins(instanceId) }
+
+  // ── Feature #3: Inline rename ─────────────────────────
+  // BUG FIX: store instanceId + component ref so position recomputes
+  // reactively with vx/vy/vscale instead of computing once at click time
+  let inlineEditId = null  // instanceId
+
+  $: inlineEdit = (() => {
+    if (!inlineEditId) return null
+    const comp = $components.find(c => c.instanceId === inlineEditId)
+    if (!comp) { inlineEditId = null; return null }
+    const cpx = comp.x * vscale + vx
+    const cpy = comp.y * vscale + vy
+    return {
+      instanceId: comp.instanceId,
+      x: cpx + (comp.width * vscale) / 2,
+      y: cpy + 20 * vscale,
+      w: comp.width * vscale,
+      label: comp.label
+    }
+  })()
+
+  // Separate mutable label for the input (can't bind to $: derived directly)
+  let inlineLabel = ''
+  // BUG FIX: sync inlineLabel when a new inline edit session opens
+  let _prevInlineEditId = null
+  $: if (inlineEditId && inlineEditId !== _prevInlineEditId) {
+    const comp = $components.find(c => c.instanceId === inlineEditId)
+    if (comp) inlineLabel = comp.label
+    _prevInlineEditId = inlineEditId
+  }
+  $: if (!inlineEditId) _prevInlineEditId = null
+
+  function onNodeDblClick({ detail: { comp } }) {
+    inlineLabel = comp.label
+    inlineEditId = comp.instanceId
+  }
+
+  function commitInlineEdit() {
+    if (!inlineEditId) return
+    const val = inlineLabel?.trim()
+    if (val) updateComponent(inlineEditId, { label: val })
+    inlineEditId = null
+  }
+
+  // ── Feature #10: Zoom to selection (Shift+F) ──────────
+  function zoomToSelection() {
+    const ids = new Set()
+    if ($selection?.type === 'component') ids.add($selection.id)
+    $multiSelection.forEach(s => { if (s.type === 'component') ids.add(s.id) })
+    const cs = $components.filter(c => ids.has(c.instanceId))
+    if (!cs.length) { fitView(); return }
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity
+    cs.forEach(c => {
+      minX=Math.min(minX,c.x); minY=Math.min(minY,c.y)
+      maxX=Math.max(maxX,c.x+c.width); maxY=Math.max(maxY,c.y+c.height)
+    })
+    if (!containerEl) return
+    const pad=80, cw=containerEl.offsetWidth, ch=containerEl.offsetHeight
+    const sx=(cw-pad*2)/(maxX-minX+1), sy=(ch-pad*2)/(maxY-minY+1)
+    vscale = Math.min(2, Math.max(0.15, Math.min(sx,sy)))
+    vx = (cw - (maxX+minX)*vscale)/2
+    vy = (ch - (maxY+minY)*vscale)/2
+    zoomPct = Math.round(vscale*100)
+  }
+
+  // ── SVG drag/drop ─────────────────────────────────────
+  function onDragOver(e) { e.preventDefault() }
+  function onDrop(e) {
+    e.preventDefault()
+    const id = e.dataTransfer.getData('comp-id')
+    if (id) handleDrop(id, e.clientX, e.clientY)
+  }
+
+  // ── Status ────────────────────────────────────────────
+  $: compCount  = $components.length
+  $: wireCount  = $wires.length
+  $: multiCount = $multiSelection.length
+  $: selInfo    = multiCount > 1
+    ? `${multiCount} selected`
+    : wireStart
+    ? 'Click a pin to connect — Esc to cancel'
+    : ''
+
+  let statusFlash = ''
+  function flashStatus(msg, color = '#4ade80') {
+    statusFlash = msg
+    statusFlashColor = color
+    setTimeout(() => { if (statusFlash === msg) statusFlash = '' }, 3000)
+  }
+  let statusFlashColor = '#4ade80'
+
+  // ── Keyboard (canvas-level) ───────────────────────────
+  function onKeyDown(e) {
+    if (e.target.tagName === 'INPUT' || e.target.contentEditable === 'true') return
+    if (e.key === 'Escape') { wireStart = null; snapTarget = null; selection.set(null); multiSelection.set([]) }
+
+    // Feature 9: arrow nudge
+    const NUDGE = e.shiftKey ? 5 : 20
+    const dirs  = { ArrowLeft:[-NUDGE,0], ArrowRight:[NUDGE,0], ArrowUp:[0,-NUDGE], ArrowDown:[0,NUDGE] }
+    if (dirs[e.key]) {
+      e.preventDefault()
+      const [dx, dy] = dirs[e.key]
+      // BUG FIX: build a unified set to avoid double-moving a component
+      // that is both in $selection and $multiSelection
+      const toMove = new Set()
+      if ($selection?.type === 'component') toMove.add($selection.id)
+      $multiSelection.forEach(s => { if (s.type === 'component') toMove.add(s.id) })
+      toMove.forEach(id => {
+        const c = $components.find(c => c.instanceId === id)
+        if (c) updateComponent(c.instanceId, { x: c.x+dx, y: c.y+dy })
+      })
+    }
+  }
+
+  onMount(() => {
+    // ── Attach canvas events manually ──────────────────────────────────
+    // Svelte 5 compiles on:wheel as passive by default — must use
+    // addEventListener with { passive: false } so e.preventDefault() works.
+    // We also attach mouse events here to keep everything in one place.
+    const el = containerEl
+
+    el.addEventListener('wheel',      onWheel,           { passive: false })
+    el.addEventListener('mousedown',  onMouseDown,       { passive: true  })
+    el.addEventListener('mousemove',  onMouseMove,       { passive: true  })
+    el.addEventListener('mouseup',    onMouseUp,         { passive: true  })
+    el.addEventListener('contextmenu',onCanvasContextMenu)
+    el.addEventListener('dragover',   onDragOver)
+    el.addEventListener('drop',       onDrop)
+
+    setTimeout(fitView, 150)
+
+    return () => {
+      el.removeEventListener('wheel',      onWheel)
+      el.removeEventListener('mousedown',  onMouseDown)
+      el.removeEventListener('mousemove',  onMouseMove)
+      el.removeEventListener('mouseup',    onMouseUp)
+      el.removeEventListener('contextmenu',onCanvasContextMenu)
+      el.removeEventListener('dragover',   onDragOver)
+      el.removeEventListener('drop',       onDrop)
+    }
+  })
+</script>
+
+<!-- Svelte 5: onkeydown / onmouseup (no colon) -->
+<svelte:window onkeydown={onKeyDown} onmouseup={onWindowMouseUp}/>
+
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<div
+  class="canvas-wrap"
+  bind:this={containerEl}
+  role="application"
+  aria-label="Wiring diagram canvas"
+>
+  <svg
+    bind:this={svgEl}
+    width="100%" height="100%"
+    xmlns="http://www.w3.org/2000/svg"
+    class:cur-cross={$activeTool==='wire'}
+    class:cur-text={$activeTool==='label'}
+    class:cur-del={$activeTool==='delete'}
+  >
+    <defs>
+      <pattern id="grid-sm" width="20" height="20" patternUnits="userSpaceOnUse"
+        patternTransform="translate({vx},{vy}) scale({vscale})">
+        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1c1c38" stroke-width="0.5"/>
+      </pattern>
+      <pattern id="grid-lg" width="100" height="100" patternUnits="userSpaceOnUse"
+        patternTransform="translate({vx},{vy}) scale({vscale})">
+        <rect width="100" height="100" fill="url(#grid-sm)"/>
+        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#28284a" stroke-width="1"/>
+      </pattern>
+      <filter id="sel-glow">
+        <feGaussianBlur stdDeviation="4" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- Background -->
+    {#if showGrid}
+      <rect id="grid-bg" width="100%" height="100%" fill="url(#grid-lg)"/>
+    {:else}
+      <rect id="grid-bg" width="100%" height="100%" fill="#0d0d1a"/>
+    {/if}
+
+    <g transform="translate({vx},{vy}) scale({vscale})">
+      <!-- Wires layer -->
+      <WireLayer {previewData} {wireColor} snapTargetPin={snapTarget} {highlightedWireIds}/>
+
+      <!-- Labels -->
+      {#each $labels as lbl (lbl.id)}
+        {@const sel = $selection?.id === lbl.id}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <text
+          x={lbl.x} y={lbl.y}
+          font-size={lbl.fontSize ?? 14}
+          fill={lbl.color ?? '#facc15'}
+          font-weight="600"
+          font-family="-apple-system, sans-serif"
+          class="lbl-node"
+          class:lbl-sel={sel}
+          on:mousedown={(e) => {
+            if ($activeTool==='delete') { removeLabel(lbl.id); return }
+            selection.set({ id:lbl.id, type:'label' })
+            e.stopPropagation()
+            // Feature: drag label directly on canvas
+            if ($activeTool === 'select') {
+              const startX = e.clientX, startY = e.clientY
+              const origX = lbl.x, origY = lbl.y
+              let moved = false
+              function onLblMove(me) {
+                const dx = (me.clientX - startX) / vscale
+                const dy = (me.clientY - startY) / vscale
+                if (!moved && Math.hypot(dx, dy) > 3) { pushHistory(); moved = true }
+                if (moved) updateLabel(lbl.id, { x: snap(origX + dx), y: snap(origY + dy) })
+              }
+              function onLblUp() {
+                window.removeEventListener('mousemove', onLblMove)
+                window.removeEventListener('mouseup', onLblUp)
+              }
+              window.addEventListener('mousemove', onLblMove)
+              window.addEventListener('mouseup', onLblUp)
+            }
+          }}
+          role="button" tabindex="0"
+        >{lbl.text}</text>
+      {/each}
+
+      <!-- Components -->
+      {#each $components as comp (comp.instanceId)}
+        <CompNode
+          {comp}
+          scale={vscale}
+          selected={$selection?.id === comp.instanceId && $selection?.type === 'component'}
+          inMultiSel={$multiSelection.some(s => s.id === comp.instanceId)}
+          usedPins={usedPinsFor(comp.instanceId)}
+          on:pinclick={onPinClick}
+          on:selectnode={onSelectNode}
+          on:dragstart={onNodeDragStart}
+          on:dragged={onNodeDragged}
+          on:dblclick={onNodeDblClick}
+          on:contextmenu={onCompContextMenu}
+        />
+      {/each}
+
+      <!-- Feature 1: rubber-band selection box -->
+      {#if selRect && selBox?.active && selRect.w > 2}
+        <rect
+          x={selRect.x} y={selRect.y}
+          width={selRect.w} height={selRect.h}
+          fill="rgba(79,156,249,0.06)"
+          stroke="#4f9cf9" stroke-width={1/vscale}
+          stroke-dasharray="{4/vscale},{3/vscale}"
+          pointer-events="none"
+        />
+      {/if}
+    </g>
+  </svg>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span class="s-coords">X: {statusX},  Y: {statusY}</span>
+    <span>Components: {compCount} | Wires: {wireCount}</span>
+    {#if selInfo}
+      <span class="s-hint">{selInfo}</span>
+    {/if}
+    {#if statusFlash}
+      <span class="s-flash" style="color:{statusFlashColor}">{statusFlash}</span>
+    {/if}
+  </div>
+
+  <!-- Zoom badge -->
+  <div class="zoom-badge">{zoomPct}%</div>
+
+  <!-- Feature 7: Minimap -->
+  {#if showMinimap}
+    <Minimap {vx} {vy} {vscale} cw={canvasW} ch={canvasH} on:minipan={onMinipan}/>
+  {/if}
+
+  <!-- Feature 8: Context menu -->
+  {#if ctxMenu}
+    <ContextMenu
+      x={ctxMenu.x} y={ctxMenu.y} type={ctxMenu.type}
+      on:action={onCtxAction}
+      on:close={() => ctxMenu = null}
+    />
+  {/if}
+
+  <!-- Feature #3: Inline rename overlay -->
+  {#if inlineEdit}
+    <!-- svelte-ignore a11y-autofocus -->
+    <input
+      class="inline-edit"
+      style="left:{inlineEdit.x}px; top:{inlineEdit.y}px; width:{inlineEdit.w}px; transform:translateX(-50%)"
+      bind:value={inlineLabel}
+      autofocus
+      on:blur={commitInlineEdit}
+      on:keydown={(e) => {
+        if (e.key === 'Enter') commitInlineEdit()
+        if (e.key === 'Escape') { inlineEditId = null }
+        e.stopPropagation()
+      }}
+    />
+  {/if}
+</div>
+
+<style>
+  .canvas-wrap {
+    flex:1; position:relative; overflow:hidden; background:#0d0d1a;
+    display:flex; flex-direction:column; cursor:default;
+  }
+  svg { flex:1; display:block; width:100%; height:100%; }
+  .cur-cross { cursor:crosshair; }
+  .cur-text  { cursor:text; }
+  .cur-del   { cursor:not-allowed; }
+
+  .lbl-node { cursor:move; user-select:none; }
+  .lbl-node:hover { opacity:0.8; }
+  .lbl-sel  { filter:drop-shadow(0 0 5px #facc15); }
+
+  .status-bar {
+    height:26px; background:#13132a; border-top:1px solid #252545;
+    display:flex; align-items:center; padding:0 12px; gap:18px;
+    font-size:11px; color:#505078; flex-shrink:0; overflow:hidden;
+  }
+  .s-coords { min-width:120px; }
+  .s-hint   { color:#4ade80; font-weight:600; margin-left:auto; }
+  .s-flash  { font-weight:600; margin-left:auto; }
+
+  .zoom-badge {
+    position:absolute; bottom:34px; right:10px;
+    background:rgba(13,13,26,0.88); border:1px solid #353565;
+    border-radius:4px; padding:2px 8px; font-size:11px; color:#9090b8;
+    pointer-events:none;
+  }
+
+  .inline-edit {
+    position:absolute; z-index:500;
+    background:#1a1a40; border:2px solid #4f9cf9; border-radius:5px;
+    color:#fff; font:700 13px -apple-system,sans-serif;
+    padding:4px 8px; outline:none; text-align:center;
+  }
+</style>
