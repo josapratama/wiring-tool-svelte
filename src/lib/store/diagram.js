@@ -139,6 +139,34 @@ export function updateComponent(id, patch) {
   );
 }
 
+export function rotateComponent(id, deg = 90) {
+  pushHistory();
+  components.update((cs) =>
+    cs.map((c) => {
+      if (c.instanceId === id) {
+        const nextRot = (((c.rotation || 0) + deg) % 360 + 360) % 360;
+        return { ...c, rotation: nextRot };
+      }
+      return c;
+    }),
+  );
+}
+
+export function rotateComponents(ids, deg = 90) {
+  if (!ids?.length) return;
+  pushHistory();
+  const set = new Set(ids);
+  components.update((cs) =>
+    cs.map((c) => {
+      if (set.has(c.instanceId)) {
+        const nextRot = (((c.rotation || 0) + deg) % 360 + 360) % 360;
+        return { ...c, rotation: nextRot };
+      }
+      return c;
+    }),
+  );
+}
+
 export function removeComponent(id) {
   pushHistory();
   components.update((cs) => cs.filter((c) => c.instanceId !== id));
@@ -169,6 +197,27 @@ export function duplicateComponent(id) {
     x: comp.x + 40,
     y: comp.y + 40,
   });
+}
+
+export function duplicateComponents(ids) {
+  if (!ids?.length) return [];
+  pushHistory();
+  const cs = get(components);
+  const created = [];
+  ids.forEach((id) => {
+    const comp = cs.find((c) => c.instanceId === id);
+    if (comp) {
+      created.push(
+        addComponent({
+          ...strip(comp),
+          instanceId: undefined,
+          x: comp.x + 40,
+          y: comp.y + 40,
+        }),
+      );
+    }
+  });
+  return created;
 }
 
 // ── Wires ─────────────────────────────────────────────────

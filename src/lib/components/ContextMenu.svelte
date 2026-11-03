@@ -26,6 +26,7 @@
     on:mousedown|stopPropagation={() => {}}
   >
     {#if type === 'component'}
+      <button class="item" on:click={() => act('rotate')}     role="menuitem">🔄  Rotate 90° <kbd>R</kbd></button>
       <button class="item" on:click={() => act('rename')}     role="menuitem">✏️  Rename</button>
       <button class="item" on:click={() => act('duplicate')}  role="menuitem">📋  Duplicate <kbd>Ctrl+D</kbd></button>
       <div class="divider"></div>

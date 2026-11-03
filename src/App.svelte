@@ -9,7 +9,8 @@
     activeTool, undo, redo, pushHistory,
     selection, multiSelection,
     components as compsStore, wires as wiresStore,
-    duplicateComponent, removeComponent, removeComponents,
+    duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
+    removeComponent, removeComponents,
     removeWire, removeLabel,
     getAutoSave, clearAutoSave, initAutoSave
   } from '$lib/store/diagram.js'
@@ -70,20 +71,34 @@
   function exportPNG() {
     const svg = document.querySelector('.canvas-wrap svg')
     if (!svg) return
-    const s    = new XMLSerializer().serializeToString(svg)
     const rect = svg.getBoundingClientRect()
-    const can  = document.createElement('canvas')
-    can.width = rect.width*2; can.height = rect.height*2
+    const clone = svg.cloneNode(true)
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    clone.setAttribute('width', rect.width)
+    clone.setAttribute('height', rect.height)
+    clone.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`)
+    clone.setAttribute('style', 'background:#0d0d1a')
+
+    const s = new XMLSerializer().serializeToString(clone)
+    const can = document.createElement('canvas')
+    const scale = 2
+    can.width = rect.width * scale
+    can.height = rect.height * scale
     const ctx = can.getContext('2d')
-    ctx.fillStyle = '#0d0d1a'; ctx.fillRect(0,0,can.width,can.height)
-    const img  = new Image()
-    const blob = new Blob([s],{type:'image/svg+xml;charset=utf-8'})
-    const url  = URL.createObjectURL(blob)
+    ctx.fillStyle = '#0d0d1a'
+    ctx.fillRect(0, 0, can.width, can.height)
+    const img = new Image()
+    const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
     img.onload = () => {
-      ctx.scale(2,2); ctx.drawImage(img,0,0,rect.width,rect.height)
-      dl(can.toDataURL('image/png'), (projectName||'wiring')+'.png', null, true)
+      ctx.drawImage(img, 0, 0, can.width, can.height)
+      dl(can.toDataURL('image/png'), (projectName || 'wiring') + '.png', null, true)
       URL.revokeObjectURL(url)
       flash('PNG exported ✓')
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      flash('⚠ Failed to export PNG', '#f87171')
     }
     img.src = url
   }
@@ -198,6 +213,7 @@
     { key:'V',        desc:'Select tool' },
     { key:'W',        desc:'Wire tool' },
     { key:'L',        desc:'Label tool' },
+    { key:'R',        desc:'Rotate 90° (Shift = -90°)' },
     { key:'Del',      desc:'Delete selected' },
     { key:'F',        desc:'Fit view' },
     { key:'Shift+F',  desc:'Zoom to selection' },
@@ -215,7 +231,7 @@
 
   // ── Keyboard (global) ─────────────────────────────────
   function onKeyDown(e) {
-    if (e.target.tagName==='INPUT' || e.target.contentEditable==='true') return
+    if (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA' || e.target.isContentEditable) return
 
     // Feature #8: toggle shortcut overlay
     if (e.key === '?') { showShortcuts = !showShortcuts; return }
@@ -229,15 +245,27 @@
       canvasRef.zoomToSelection?.(); return
     }
 
-    // Ctrl+D duplicate
+    // R / Shift+R: Rotate selected components
+    if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      const deg = e.shiftKey ? -90 : 90
+      const ms = $multiSelection
+      if (ms.length > 1) {
+        rotateComponents(ms.filter(s => s.type === 'component').map(s => s.id), deg)
+      } else if ($selection?.type === 'component') {
+        rotateComponent($selection.id, deg)
+      }
+      return
+    }
+
+    // Ctrl+D duplicate (single history snapshot)
     if (e.ctrlKey && e.key==='d') {
       e.preventDefault()
       const ms = $multiSelection
       if (ms.length > 1) {
-        pushHistory()
-        ms.forEach(s => { if(s.type==='component') duplicateComponent(s.id) })
+        duplicateComponents(ms.filter(s => s.type==='component').map(s => s.id))
       } else if ($selection?.type === 'component') {
-        pushHistory(); duplicateComponent($selection.id)
+        duplicateComponent($selection.id)
       }
       return
     }

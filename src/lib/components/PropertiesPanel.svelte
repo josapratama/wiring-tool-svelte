@@ -8,7 +8,7 @@
   import { selection, multiSelection, components, wires, labels,
            updateComponent, updateWire, updateLabel,
            removeComponent, removeComponents, removeWire, removeLabel,
-           duplicateComponent, pushHistory } from '$lib/store/diagram.js'
+           duplicateComponent, duplicateComponents, rotateComponent, rotateComponents, pushHistory } from '$lib/store/diagram.js'
   import { PIN_COLORS } from '$lib/data/pin-colors.js'
   import { MCU_PINS }   from '$lib/data/mcu-pins.js'
 
@@ -63,8 +63,10 @@
 
     <div class="multi-actions">
       <button class="btn-act" on:click={() => {
-        pushHistory()
-        multiItems.forEach(c => duplicateComponent(c.instanceId))
+        rotateComponents(multiItems.map(c => c.instanceId), 90)
+      }}>🔄 Rotate All</button>
+      <button class="btn-act" on:click={() => {
+        duplicateComponents(multiItems.map(c => c.instanceId))
       }}>📋 Duplicate All</button>
       <button class="btn-act danger" on:click={() => {
         // BUG FIX #B1: single history step for batch delete
@@ -172,7 +174,10 @@
     </div>
 
     <div class="action-row">
-      <button class="btn-act" on:click={() => { pushHistory(); duplicateComponent(item.instanceId) }}>
+      <button class="btn-act" on:click={() => rotateComponent(item.instanceId, 90)} title="Rotate component 90° (R)">
+        🔄 Rotate
+      </button>
+      <button class="btn-act" on:click={() => duplicateComponent(item.instanceId)}>
         📋 Duplicate
       </button>
       <button class="btn-act danger" on:click={() => removeComponent(item.instanceId)}>

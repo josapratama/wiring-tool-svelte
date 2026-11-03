@@ -16,6 +16,7 @@
     components, wires, labels, selection, multiSelection, activeTool,
     addComponent, addWire, addLabel, removeLabel, removeWire, removeComponent,
     updateLabel, updateComponent, updateWire, duplicateComponent, pushHistory,
+    rotateComponent, rotateComponents,
     getConnectedWireIds, getUsedPins
   } from '$lib/store/diagram.js'
 
@@ -26,11 +27,13 @@
   // Parent does: <Canvas bind:api={canvasRef}/>
   // then calls:  canvasRef?.fitView()
   export let api = {}
+  export let isLightMode = false
 
   $: Object.assign(api, {
     fitView, zoomIn, zoomOut, zoomToSelection,
     toggleGrid, toggleMinimap,
-    handleDrop, setWireColor, cancelWire
+    handleDrop, setWireColor, cancelWire,
+    selectWire, selectComponent
   })
 
   // ── Viewport ──────────────────────────────────────────
@@ -407,12 +410,15 @@
     if (!saved) return
     const t = saved.target
 
+    if (action === 'rotate' && t?.instanceId) {
+      rotateComponent(t.instanceId, 90)
+    }
     if (action === 'delete') {
       if (t?.instanceId) removeComponent(t.instanceId)
       else if (t?.id)    removeWire(t.id)
     }
     if (action === 'duplicate' && t?.instanceId) {
-      pushHistory(); duplicateComponent(t.instanceId)
+      duplicateComponent(t.instanceId)
     }
     if (action === 'rename' && t?.instanceId) {
       const newLabel = prompt('Rename component:', t.label)
@@ -443,12 +449,67 @@
   // ── Cancel wire ───────────────────────────────────────
   function cancelWire() { wireStart = null; snapTarget = null }
 
-  // ── Feature #2: Connection highlight ──────────────────
-  // When a component is selected, highlight its connected wires
+  // ── Net Highlighting & Connection Glow ──────────────────
   $: highlightedWireIds = (() => {
-    if ($selection?.type === 'component') return new Set(getConnectedWireIds($selection.id))
-    return new Set()
+    const ws = $wires
+    const ids = new Set()
+    const selWireId = $selection?.type === 'wire' ? $selection.id : null
+    const selCompId = $selection?.type === 'component' ? $selection.id : null
+
+    if (selWireId) {
+      ids.add(selWireId)
+      const selWire = ws.find(w => w.id === selWireId)
+      if (selWire) {
+        ws.forEach(w => {
+          if ((w.fromComp === selWire.fromComp && w.fromPin === selWire.fromPin) ||
+              (w.toComp === selWire.fromComp && w.toPin === selWire.fromPin) ||
+              (w.fromComp === selWire.toComp && w.fromPin === selWire.toPin) ||
+              (w.toComp === selWire.toComp && w.toPin === selWire.toPin)) {
+            ids.add(w.id)
+          }
+        })
+      }
+    } else if (selCompId) {
+      ws.forEach(w => {
+        if (w.fromComp === selCompId || w.toComp === selCompId) {
+          ids.add(w.id)
+        }
+      })
+    }
+
+    if (wireStart) {
+      ws.forEach(w => {
+        if ((w.fromComp === wireStart.comp.instanceId && w.fromPin === wireStart.pinId) ||
+            (w.toComp === wireStart.comp.instanceId && w.toPin === wireStart.pinId)) {
+          ids.add(w.id)
+        }
+      })
+    }
+    return ids
   })()
+
+  export function selectWire(id) {
+    selection.set({ id, type: 'wire' })
+    const w = $wires.find(wire => wire.id === id)
+    if (w) {
+      const fc = $components.find(c => c.instanceId === w.fromComp)
+      if (fc && containerEl) {
+        const cw = containerEl.offsetWidth || canvasW
+        const ch = containerEl.offsetHeight || canvasH
+        setViewport(cw / 2 - fc.x * vscale, ch / 2 - fc.y * vscale, vscale)
+      }
+    }
+  }
+
+  export function selectComponent(id) {
+    selection.set({ id, type: 'component' })
+    const c = $components.find(comp => comp.instanceId === id)
+    if (c && containerEl) {
+      const cw = containerEl.offsetWidth || canvasW
+      const ch = containerEl.offsetHeight || canvasH
+      setViewport(cw / 2 - (c.x + c.width / 2) * vscale, ch / 2 - (c.y + c.height / 2) * vscale, vscale)
+    }
+  }
 
   // ── Feature #5: Used pins per component ───────────────
   // Passed to CompNode as a Set of used pinIds
@@ -636,6 +697,15 @@
         <rect width="100" height="100" fill="url(#grid-sm)"/>
         <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#28284a" stroke-width="1"/>
       </pattern>
+      <pattern id="grid-sm-light" width="20" height="20" patternUnits="userSpaceOnUse"
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
+      </pattern>
+      <pattern id="grid-light" width="100" height="100" patternUnits="userSpaceOnUse"
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <rect width="100" height="100" fill="url(#grid-sm-light)"/>
+        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#cbd5e1" stroke-width="1"/>
+      </pattern>
       <filter id="sel-glow">
         <feGaussianBlur stdDeviation="4" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -644,9 +714,9 @@
 
     <!-- Background -->
     {#if showGrid}
-      <rect id="grid-bg" width="100%" height="100%" fill="url(#grid-lg)"/>
+      <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? 'url(#grid-light)' : 'url(#grid-lg)'}/>
     {:else}
-      <rect id="grid-bg" width="100%" height="100%" fill="#0d0d1a"/>
+      <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? '#ffffff' : '#0d0d1a'}/>
     {/if}
 
     <g transform="translate({svgVx},{svgVy}) scale({svgVscale})">
@@ -697,6 +767,7 @@
         <CompNode
           {comp}
           scale={svgVscale}
+          {isLightMode}
           selected={$selection?.id === comp.instanceId && $selection?.type === 'component'}
           inMultiSel={$multiSelection.some(s => s.id === comp.instanceId)}
           usedPins={usedPinsFor(comp.instanceId)}

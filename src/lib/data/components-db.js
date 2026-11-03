@@ -593,10 +593,45 @@ export const CATEGORIES = [
   },
 ];
 
+const CUSTOM_KEY = "wiretool_custom_components";
+
+export function getCustomComponents() {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(CUSTOM_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+export function saveCustomComponent(comp) {
+  try {
+    const existing = getCustomComponents();
+    const updated = [...existing.filter((c) => c.id !== comp.id), comp];
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (_) {
+    return [];
+  }
+}
+
+export function deleteCustomComponent(id) {
+  try {
+    const existing = getCustomComponents();
+    const updated = existing.filter((c) => c.id !== id);
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (_) {
+    return [];
+  }
+}
+
 export function findCompDef(id) {
   for (const cat of CATEGORIES) {
     const found = cat.items.find((i) => i.id === id);
     if (found) return JSON.parse(JSON.stringify(found));
   }
+  const custom = getCustomComponents().find((i) => i.id === id);
+  if (custom) return JSON.parse(JSON.stringify(custom));
   return null;
 }

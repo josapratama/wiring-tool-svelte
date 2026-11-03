@@ -16,6 +16,7 @@
   export let inMultiSel = false
   export let scale     = 1      // BUG FIX #1: passed from Canvas
   export let usedPins  = new Set()  // Feature #5: set of connected pin IDs
+  export let isLightMode = false
 
   const dispatch = createEventDispatcher()
 
@@ -29,7 +30,9 @@
     comms:   { body:'#041320', title:'#082640', border:'#60a5fa' },
     output:  { body:'#180c04', title:'#381808', border:'#f97316' },
   }
-  $: theme = THEMES[comp.theme] ?? THEMES.passive
+  $: theme = isLightMode
+    ? { body: '#ffffff', title: '#f1f5f9', border: '#475569' }
+    : (THEMES[comp.theme] ?? THEMES.passive)
 
   // BUG FIX #2: unified spacing from geometry.js
   $: mcuData   = comp.isMCU ? (MCU_PINS[comp.id] ?? null) : null
@@ -177,7 +180,7 @@
 <g
   class="comp-node"
   class:highlighted={isHighlighted}
-  transform="translate({comp.x},{comp.y})"
+  transform="translate({comp.x},{comp.y}) rotate({comp.rotation || 0}, {comp.width/2}, {comp.height/2})"
   on:mousedown={onMouseDown}
   on:dblclick={onDblClick}
   on:contextmenu={(e) => { dispatch('contextmenu', { comp, e }); e.preventDefault(); e.stopPropagation() }}
@@ -198,11 +201,11 @@
     rx="5" ry="5" fill={theme.title}/>
 
   <!-- Label -->
-  <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label"
+  <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" fill={isLightMode ? '#0f172a' : '#ffffff'}
     dominant-baseline="central" text-anchor="middle">{comp.label}</text>
 
   <!-- Sub-label -->
-  <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel"
+  <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" fill={isLightMode ? '#64748b' : 'rgba(255,255,255,0.4)'}
     text-anchor="middle">{comp.id}</text>
 
   <!-- Divider -->
@@ -327,6 +330,5 @@
   .comp-prop   { font:11px/1 'Consolas',monospace; fill:#8888aa; pointer-events:none; }
   .pin-dot     { cursor:crosshair; transition:r 0.12s; }
   .pin-dot:hover { r:10; stroke:#fff !important; stroke-width:2 !important; }
-  .gnd-label   { fill:#6b7280; opacity:0.7; }
   .pwr-label   { font:700 9px/1 'Consolas',monospace; pointer-events:none; }
 </style>

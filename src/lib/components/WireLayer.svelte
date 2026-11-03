@@ -1,10 +1,11 @@
 <script>
   /**
    * WireLayer v3:
-   *  - GND pins get a ground symbol (▼) instead of a long wire
+   *  - All user-drawn wires are rendered clearly with selection, styling, and hover
    *  - Wire labels placed on the longest segment (less overlap)
    *  - Label collision detection: stagger overlapping labels vertically
    *  - Junction dots at T-intersections
+   *  - Full data-wire-id for context menu & selection hit-testing
    */
   import { pinPos, routeWire, routePreview, pathMidpoint, labelPos } from '$lib/engine/geometry.js'
   import { wires, components, selection, activeTool, removeWire } from '$lib/store/diagram.js'
@@ -14,61 +15,19 @@
   export let snapTargetPin      = null
   export let highlightedWireIds = new Set()
 
-  // Power pin IDs that get a symbol in CompNode — suppress wire between two power-net pins
-  // (e.g. +5V wire from buck to OLED VCC is replaced by matching power net labels)
-  const POWER_NET_IDS = new Set([
-    'VCC','V5','V5_L','V3V3','P3V3_1','P3V3_17','VSYS','VBUS','V30',
-    '+5V','3V3','3.3V','5V',
-  ])
-
-  // Pin IDs/types considered GND
-  const GND_IDS = new Set(['GND', 'GND1', 'GND2', 'VSS', 'AGND', 'DGND',
-    'GND_L','GND_R','GND_2','GND_6','GND_9','GND_14','GND_20','GND_25',
-    'GND_30','GND_34','GND_39','GND1','GND2','GND3','GND4','GND5','GND6','GND7','GND8'])
-
-  function pinType(comp, pinId) {
-    if (!comp) return null
-    const pin = (comp.pins ?? []).find(p => p.id === pinId)
-    return pin?.type ?? null
-  }
-
-  function isPowerNetWire(w) {
-    // Suppress ALL wires where both ends are 'power' type pins.
-    // Power net symbols on each pin already convey the connection — no wire needed.
-    const fc = getComp(w.fromComp), tc = getComp(w.toComp)
-    if (!fc || !tc) return false
-    const ft = pinType(fc, w.fromPin)
-    const tt = pinType(tc, w.toPin)
-    return ft === 'power' && tt === 'power'
-  }
-
-  function isGndWire(w) {
-    const fc = getComp(w.fromComp), tc = getComp(w.toComp)
-    if (!fc || !tc) return false
-    const fp = (fc.pins ?? []).find(p => p.id === w.fromPin)
-    const tp = (tc.pins ?? []).find(p => p.id === w.toPin)
-    const fIsGnd = fp ? fp.type === 'gnd' : GND_IDS.has(w.fromPin)
-    const tIsGnd = tp ? tp.type === 'gnd' : GND_IDS.has(w.toPin)
-    return fIsGnd && tIsGnd
-  }
-
   function getComp(id) { return $components.find(c => c.instanceId === id) }
 
-  $: resolvedWires = $wires.map((w, i) => {
+  $: normalWires = $wires.map((w, i) => {
     const fc = getComp(w.fromComp), tc = getComp(w.toComp)
     if (!fc || !tc) return null
     const p1 = pinPos(fc)(w.fromPin)
     const p2 = pinPos(tc)(w.toPin)
     if (!p1 || !p2) return null
-    // Suppress GND and power-net wires — symbols on pins replace them
-    if (isGndWire(w) || isPowerNetWire(w)) return { suppressed: true, wire: w }
     const { d, pts } = routeWire(p1, p2, i)
     const mid  = pathMidpoint(pts)
     const lpos = labelPos(pts)
     return { d, pts, p1, p2, mid, lpos, wire: w }
   }).filter(Boolean)
-
-  $: normalWires = resolvedWires.filter(r => !r.suppressed)
 
   $: labeledWires = (() => {
     const labeled = normalWires.filter(r => r.wire.label)
@@ -134,16 +93,13 @@
   {/if}
 {/if}
 
-<!-- GND wires — suppressed (GND symbol already shown on each component pin) -->
-<!-- They remain in the store so they appear in Netlist/BOM exports -->
-
-<!-- Normal wires -->
+<!-- Wires -->
 {#each normalWires as { d, p1, p2, wire } (wire.id)}
   {@const sel = $selection?.id === wire.id && $selection?.type === 'wire'}
   {@const highlighted = highlightedWireIds.has(wire.id)}
   {@const col = wire.color ?? '#4f9cf9'}
   <!-- svelte-ignore a11y-interactive-supports-focus -->
-  <g class="wire-grp" role="button" tabindex="0"
+  <g class="wire-grp" data-wire-id={wire.id} role="button" tabindex="0"
     aria-label="wire {wire.label || wire.id}"
     on:click={(e) => handleClick(wire, e)}
     on:contextmenu={(e) => { e.preventDefault(); e.stopPropagation(); handleClick(wire, e) }}
@@ -181,5 +137,4 @@
 <style>
   .wire-grp { cursor:pointer; }
   .wire-grp:hover path:nth-child(2) { stroke-width:4.5; }
-  .gnd-grp { cursor:pointer; }
 </style>

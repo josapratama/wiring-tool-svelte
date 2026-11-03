@@ -25,42 +25,79 @@ export function mcuHeight(compId) {
 
 // ── Pin world positions ───────────────────────────────────────────────
 
+function rotateSide(side, deg) {
+  const SIDES = ["top", "right", "bottom", "left"];
+  const idx = SIDES.indexOf(side);
+  if (idx < 0) return side;
+  const steps = Math.round((((deg % 360) + 360) % 360) / 90);
+  return SIDES[(idx + steps) % 4];
+}
+
 /** Returns a function (pinId) => {x, y, side} for the given component */
 export function pinPos(comp) {
   return (pinId) => {
     const { x, y, width: W, height: H } = comp;
+    let base = null;
     if (comp.isMCU) {
       const pins = MCU_PINS[comp.id];
-      if (!pins) return { x: x + W / 2, y: y + H / 2, side: "right" };
-      const left = pins.left ?? [];
-      const right = pins.right ?? [];
-      const count = Math.max(left.length, right.length);
-      const sp = mcuPinSpacing(H, count);
-      const li = left.findIndex((p) => p.id === pinId);
-      if (li >= 0) return { x, y: y + TITLE_H + 10 + li * sp, side: "left" };
-      const ri = right.findIndex((p) => p.id === pinId);
-      if (ri >= 0)
-        return { x: x + W, y: y + TITLE_H + 10 + ri * sp, side: "right" };
+      if (!pins) base = { x: x + W / 2, y: y + H / 2, side: "right" };
+      else {
+        const left = pins.left ?? [];
+        const right = pins.right ?? [];
+        const count = Math.max(left.length, right.length);
+        const sp = mcuPinSpacing(H, count);
+        const li = left.findIndex((p) => p.id === pinId);
+        if (li >= 0) base = { x, y: y + TITLE_H + 10 + li * sp, side: "left" };
+        else {
+          const ri = right.findIndex((p) => p.id === pinId);
+          if (ri >= 0)
+            base = { x: x + W, y: y + TITLE_H + 10 + ri * sp, side: "right" };
+        }
+      }
     }
-    const pin = (comp.pins ?? []).find((p) => p.id === pinId);
-    if (!pin) return { x: x + W / 2, y: y + H / 2, side: "right" };
-    const pos = isFinite(pin.pos) ? pin.pos : 0.5;
-    switch (pin.side) {
-      case "left":
-        return { x, y: y + TITLE_H + (H - TITLE_H) * pos, side: "left" };
-      case "right":
-        return {
-          x: x + W,
-          y: y + TITLE_H + (H - TITLE_H) * pos,
-          side: "right",
-        };
-      case "top":
-        return { x: x + W * pos, y, side: "top" };
-      case "bottom":
-        return { x: x + W * pos, y: y + H, side: "bottom" };
-      default:
-        return { x: x + W / 2, y: y + H / 2, side: "right" };
+    if (!base) {
+      const pin = (comp.pins ?? []).find((p) => p.id === pinId);
+      if (!pin) base = { x: x + W / 2, y: y + H / 2, side: "right" };
+      else {
+        const pos = isFinite(pin.pos) ? pin.pos : 0.5;
+        switch (pin.side) {
+          case "left":
+            base = { x, y: y + TITLE_H + (H - TITLE_H) * pos, side: "left" };
+            break;
+          case "right":
+            base = {
+              x: x + W,
+              y: y + TITLE_H + (H - TITLE_H) * pos,
+              side: "right",
+            };
+            break;
+          case "top":
+            base = { x: x + W * pos, y, side: "top" };
+            break;
+          case "bottom":
+            base = { x: x + W * pos, y: y + H, side: "bottom" };
+            break;
+          default:
+            base = { x: x + W / 2, y: y + H / 2, side: "right" };
+        }
+      }
     }
+
+    const rot = Math.round((((comp.rotation ?? 0) % 360) + 360) % 360);
+    if (rot === 0) return base;
+
+    const cx = x + W / 2;
+    const cy = y + H / 2;
+    const rad = (rot * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rx = cx + (base.x - cx) * cos - (base.y - cy) * sin;
+    const ry = cy + (base.x - cx) * sin + (base.y - cy) * cos;
+    return {
+      x: Math.round(rx * 10) / 10,
+      y: Math.round(ry * 10) / 10,
+      side: rotateSide(base.side, rot),
+    };
   };
 }
 
