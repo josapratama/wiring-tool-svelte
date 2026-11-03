@@ -96,7 +96,7 @@
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div class="modal-backdrop" on:click={() => show = false}>
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-    <div class="modal-box" on:click|stopPropagation role="dialog" aria-label="Add custom component">
+    <div class="modal-box" on:click|stopPropagation role="dialog" aria-label="Add custom component" tabindex="-1">
       <div class="modal-head">
         <span>➕ Add Custom Component</span>
         <button class="btn-close" on:click={() => show = false}>✕</button>
@@ -106,7 +106,7 @@
         <div class="form-row">
           <label class="form-group flex-2">
             <span>Component Name</span>
-            <input bind:value={name} placeholder="e.g. BNO085 IMU / Custom Motor ESC" autofocus/>
+            <input bind:value={name} placeholder="e.g. BNO085 IMU / Custom Motor ESC"/>
           </label>
           <label class="form-group flex-1">
             <span>Category</span>

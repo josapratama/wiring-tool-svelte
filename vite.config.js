@@ -8,6 +8,15 @@ export default defineConfig({
   resolve: {
     alias: { $lib: path.resolve("./src/lib") },
   },
+  server: {
+    host: "0.0.0.0",
+    port: parseInt(process.env.PORT || "3000", 10),
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: parseInt(process.env.PORT || "3000", 10),
+    allowedHosts: true,
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,
