@@ -34,8 +34,15 @@
     fitView, zoomIn, zoomOut, zoomToSelection,
     toggleGrid, toggleMinimap,
     handleDrop, setWireColor, cancelWire,
-    selectWire, selectComponent
+    selectWire, selectComponent, getViewCenter
   })
+
+  function getViewCenter() {
+    return {
+      x: Math.round((canvasW / 2 - vx) / vscale),
+      y: Math.round((canvasH / 2 - vy) / vscale)
+    }
+  }
 
   // ── Viewport ──────────────────────────────────────────
   let vx = 0, vy = 0, vscale = 1

@@ -199,9 +199,10 @@ export function runERC(components = [], wires = []) {
 
     // --- RULE B: Voltage Mismatch (e.g. 5V or 12V into 3.3V) ---
     if (p1.voltage != null && p2.voltage != null && p1.voltage !== p2.voltage) {
-      // Allow voltage divider or buck converter connections
+      // Allow voltage divider, buck converter, or level shifter connections
       const isDivider = fc.id?.includes('divider') || tc.id?.includes('divider') ||
-                        fc.id?.includes('buck') || tc.id?.includes('buck')
+                        fc.id?.includes('buck') || tc.id?.includes('buck') ||
+                        fc.id?.includes('shifter') || tc.id?.includes('shifter')
       if (!isDivider) {
         issues.push({
           id: `erc_volt_${wire.id}`,

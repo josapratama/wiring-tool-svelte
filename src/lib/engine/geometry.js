@@ -178,7 +178,20 @@ export function routeWire(p1, p2, wireIndex = 0, mode = "orthogonal") {
       y: p2.side === 'top' ? p2.y - handleLen : p2.side === 'bottom' ? p2.y + handleLen : p2.y
     };
 
-    const pts = [p1, c1, c2, p2];
+    // Sample bezier curve into points so pathMidpoint & labelPos place labels exactly on the curve
+    const pts = [];
+    const steps = 10;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const u = 1 - t;
+      const tt = t * t, uu = u * u;
+      const uuu = uu * u, ttt = tt * t;
+      pts.push({
+        x: uuu * p1.x + 3 * uu * t * c1.x + 3 * u * tt * c2.x + ttt * p2.x,
+        y: uuu * p1.y + 3 * uu * t * c1.y + 3 * u * tt * c2.y + ttt * p2.y
+      });
+    }
+
     return {
       d: `M ${r(p1.x)} ${r(p1.y)} C ${r(c1.x)} ${r(c1.y)}, ${r(c2.x)} ${r(c2.y)}, ${r(p2.x)} ${r(p2.y)}`,
       pts

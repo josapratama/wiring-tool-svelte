@@ -587,6 +587,7 @@
   <!-- Feature: Quick Component Search Palette -->
   <QuickPaletteModal
     bind:show={showQuickPalette}
+    canvasCenter={canvasRef.getViewCenter?.() || { x: 400, y: 300 }}
     on:added={() => flash('Komponen ditambahkan ke kanvas ✓')}
   />
 </div>

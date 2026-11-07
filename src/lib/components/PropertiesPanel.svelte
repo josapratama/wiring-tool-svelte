@@ -5,7 +5,7 @@
    * - Wire color change from context
    * - Notes field
    */
-  import { selection, multiSelection, components, wires, labels,
+  import { selection, multiSelection, components, wires, labels, routingMode,
            updateComponent, updateWire, updateLabel,
            removeComponent, removeComponents, removeWire, removeLabel,
            duplicateComponent, duplicateComponents, rotateComponent, rotateComponents, pushHistory } from '$lib/store/diagram.js'
@@ -201,6 +201,16 @@
         on:input={e => updateWire(item.id, { color: e.target.value })}/>
     </label>
 
+    <label class="field">
+      <span>Style</span>
+      <select value={item.routingMode ?? $routingMode}
+        on:change={e => updateWire(item.id, { routingMode: e.target.value })}>
+        <option value="orthogonal">Orthogonal 90°</option>
+        <option value="curved">Curved Bezier</option>
+        <option value="direct">Direct Line</option>
+      </select>
+    </label>
+
     <div class="section-title" style="margin-top:10px">Quick Colors</div>
     <div class="quick-colors">
       {#each ['#ef4444','#4ade80','#60a5fa','#a78bfa','#f59e0b','#34d399','#fb923c','#facc15'] as col}
@@ -282,12 +292,12 @@
 
   .field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
   .field span { font-size: 11px; color: #7070a0; }
-  .field input {
+  .field input, .field select {
     background: #0d0d1a; border: 1px solid #2a2a50; border-radius: 4px;
     padding: 5px 8px; color: #e8e8f5; font-size: 12px; outline: none; width: 100%;
     transition: border-color 0.15s;
   }
-  .field input:focus { border-color: #4f9cf9; }
+  .field input:focus, .field select:focus { border-color: #4f9cf9; }
   .field input[type="color"] { height: 32px; padding: 2px; cursor: pointer; }
 
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
