@@ -8,7 +8,7 @@
    *  - Full data-wire-id for context menu & selection hit-testing
    */
   import { pinPos, routeWire, routePreview, pathMidpoint, labelPos } from '$lib/engine/geometry.js'
-  import { wires, components, selection, activeTool, removeWire } from '$lib/store/diagram.js'
+  import { wires, components, selection, activeTool, removeWire, routingMode } from '$lib/store/diagram.js'
 
   export let previewData        = null
   export let wireColor          = '#ef4444'
@@ -23,7 +23,7 @@
     const p1 = pinPos(fc)(w.fromPin)
     const p2 = pinPos(tc)(w.toPin)
     if (!p1 || !p2) return null
-    const { d, pts } = routeWire(p1, p2, i)
+    const { d, pts } = routeWire(p1, p2, i, w.routingMode || $routingMode)
     const mid  = pathMidpoint(pts)
     const lpos = labelPos(pts)
     return { d, pts, p1, p2, mid, lpos, wire: w }
@@ -63,7 +63,7 @@
     if (!previewData) return null
     const p1 = pinPos(previewData.fromComp)(previewData.fromPinId)
     if (!p1) return null
-    return routePreview(p1, previewData.cursorX, previewData.cursorY)
+    return routePreview(p1, previewData.cursorX, previewData.cursorY, $routingMode)
   })()
 
   function handleClick(w, e) {

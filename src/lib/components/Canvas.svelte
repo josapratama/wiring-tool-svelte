@@ -22,6 +22,7 @@
 
   import { findCompDef }                     from '$lib/data/components-db.js'
   import { pinPos, snap, nearestPin, allPinPositions } from '$lib/engine/geometry.js'
+  import { findCompatiblePins }              from '$lib/engine/erc.js'
 
   // ── Public API exposed to parent via bind:api ─────────
   // Parent does: <Canvas bind:api={canvasRef}/>
@@ -78,6 +79,9 @@
         cursorX: snapTarget ? snapTarget.pos.x : cursorWorld.x,
         cursorY: snapTarget ? snapTarget.pos.y : cursorWorld.y }
     : null
+
+  $: compatiblePins = wireStart ? findCompatiblePins(wireStart.comp, wireStart.pinId, $components) : null
+  $: activeWireSourceKey = wireStart ? `${wireStart.comp.instanceId}::${wireStart.pinId}` : null
 
   // Auto-label map — Feature 3
   const AUTO_LABELS = {
@@ -768,6 +772,8 @@
           {comp}
           scale={svgVscale}
           {isLightMode}
+          {compatiblePins}
+          {activeWireSourceKey}
           selected={$selection?.id === comp.instanceId && $selection?.type === 'component'}
           inMultiSel={$multiSelection.some(s => s.id === comp.instanceId)}
           usedPins={usedPinsFor(comp.instanceId)}

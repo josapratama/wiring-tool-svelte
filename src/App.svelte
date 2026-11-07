@@ -2,12 +2,16 @@
   import Canvas          from '$lib/components/Canvas.svelte'
   import Sidebar         from '$lib/components/Sidebar.svelte'
   import PropertiesPanel from '$lib/components/PropertiesPanel.svelte'
+  import ERCModal        from '$lib/components/ERCModal.svelte'
+  import CodeGenModal    from '$lib/components/CodeGenModal.svelte'
+  import WokwiModal      from '$lib/components/WokwiModal.svelte'
+  import QuickPaletteModal from '$lib/components/QuickPaletteModal.svelte'
 
   import { TEMPLATES }   from '$lib/store/templates.js'
   import {
     loadDiagram, clearDiagram, getDiagram, getNetlist, getBOM,
     activeTool, undo, redo, pushHistory,
-    selection, multiSelection,
+    selection, multiSelection, routingMode,
     components as compsStore, wires as wiresStore,
     duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
     removeComponent, removeComponents,
@@ -15,10 +19,21 @@
     getAutoSave, clearAutoSave, initAutoSave
   } from '$lib/store/diagram.js'
   import { findCompDef } from '$lib/data/components-db.js'
+  import { runERC }      from '$lib/engine/erc.js'
   import { onMount }     from 'svelte'
 
   let canvasRef = {}  // filled by Canvas via bind:api
   let projectName = 'ESP32-S3 FI Diagnostic'
+  let isLightMode = false
+
+  // Modals state
+  let showERCModal = false
+  let showCodeGenModal = false
+  let showWokwiModal = false
+  let showQuickPalette = false
+
+  // Reactive ERC analysis
+  $: ercResult = runERC($compsStore, $wiresStore)
 
   // ── Tools ─────────────────────────────────────────────
   const TOOLS = [
@@ -68,16 +83,23 @@
     })
   }
 
+  function toggleTheme() {
+    isLightMode = !isLightMode
+    try { localStorage.setItem('wiretool_theme', isLightMode ? 'light' : 'dark') } catch {}
+    flash(isLightMode ? '☀️ Light Mode diaktifkan' : '🌙 Dark Mode diaktifkan')
+  }
+
   function exportPNG() {
     const svg = document.querySelector('.canvas-wrap svg')
     if (!svg) return
     const rect = svg.getBoundingClientRect()
     const clone = svg.cloneNode(true)
+    const bg = isLightMode ? '#ffffff' : '#0d0d1a'
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
     clone.setAttribute('width', rect.width)
     clone.setAttribute('height', rect.height)
     clone.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`)
-    clone.setAttribute('style', 'background:#0d0d1a')
+    clone.setAttribute('style', `background:${bg}`)
 
     const s = new XMLSerializer().serializeToString(clone)
     const can = document.createElement('canvas')
@@ -85,7 +107,7 @@
     can.width = rect.width * scale
     can.height = rect.height * scale
     const ctx = can.getContext('2d')
-    ctx.fillStyle = '#0d0d1a'
+    ctx.fillStyle = bg
     ctx.fillRect(0, 0, can.width, can.height)
     const img = new Image()
     const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' })
@@ -108,8 +130,9 @@
     const svg = document.querySelector('.canvas-wrap svg')
     if (!svg) return
     const clone = svg.cloneNode(true)
+    const bg = isLightMode ? '#ffffff' : '#0d0d1a'
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-    clone.setAttribute('style', 'background:#0d0d1a')
+    clone.setAttribute('style', `background:${bg}`)
     const s = new XMLSerializer().serializeToString(clone)
     dl(s, (projectName||'wiring')+'.svg', 'image/svg+xml')
     flash('SVG exported ✓')
@@ -210,6 +233,7 @@
   // ── Feature #8: Shortcut overlay ──────────────────────
   let showShortcuts = false
   const SHORTCUTS = [
+    { key:'Ctrl+K / /',desc:'Cari & pasang komponen cepat' },
     { key:'V',        desc:'Select tool' },
     { key:'W',        desc:'Wire tool' },
     { key:'L',        desc:'Label tool' },
@@ -233,9 +257,23 @@
   function onKeyDown(e) {
     if (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA' || e.target.isContentEditable) return
 
+    // Quick palette: Ctrl+K or /
+    if ((e.ctrlKey && (e.key === 'k' || e.key === 'K')) || e.key === '/') {
+      e.preventDefault()
+      showQuickPalette = true
+      return
+    }
+
     // Feature #8: toggle shortcut overlay
     if (e.key === '?') { showShortcuts = !showShortcuts; return }
-    if (e.key === 'Escape') { showShortcuts = false; showStats = false }
+    if (e.key === 'Escape') {
+      showShortcuts = false
+      showStats = false
+      showERCModal = false
+      showCodeGenModal = false
+      showWokwiModal = false
+      showQuickPalette = false
+    }
 
     if (e.ctrlKey && e.key==='z') { undo(); return }
     if (e.ctrlKey && e.key==='y') { redo(); return }
@@ -299,6 +337,11 @@
 
   // ── Feature #9: Auto-save restore on mount ────────────
   onMount(() => {
+    try {
+      const savedTheme = localStorage.getItem('wiretool_theme')
+      if (savedTheme === 'light') isLightMode = true
+    } catch {}
+
     const saved = getAutoSave()
     if (saved && saved.components?.length) {
       const ok = confirm(`Auto-saved diagram found (${saved.components.length} components, ${saved.wires?.length ?? 0} wires).\nRestore it?`)
@@ -350,6 +393,32 @@
     </div>
 
     <div class="hdr-r">
+      <button class="btn btn-search" on:click={() => showQuickPalette = true} title="Cari & Pasang Komponen (Ctrl+K atau /)">
+        🔍 <span class="shortcut-tag">Ctrl+K</span>
+      </button>
+
+      <!-- Realtime ERC status button -->
+      <button class="btn btn-erc" on:click={() => showERCModal = true} title="Electrical Rules Check (ERC)">
+        ⚡ ERC
+        {#if ercResult.errors.length > 0}
+          <span class="badge-erc badge-erc-err">🚨 {ercResult.errors.length}</span>
+        {:else if ercResult.warnings.length > 0}
+          <span class="badge-erc badge-erc-warn">⚠️ {ercResult.warnings.length}</span>
+        {:else}
+          <span class="badge-erc badge-erc-ok">✓ OK</span>
+        {/if}
+      </button>
+
+      <!-- Code generator button -->
+      <button class="btn" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
+        💻 Code
+      </button>
+
+      <!-- Wokwi simulator export -->
+      <button class="btn" on:click={() => showWokwiModal = true} title="Export to Wokwi Simulator">
+        🚀 Wokwi
+      </button>
+
       <button class="btn"         on:click={importJSON}>↑ Import</button>
       <button class="btn"         on:click={exportJSON}>↓ JSON</button>
       <button class="btn"         on:click={exportSVG}>📐 SVG</button>
@@ -378,6 +447,13 @@
               title={t.title} on:click={() => setTool(t.id)}>{t.icon}</button>
           {/each}
         </div>
+        <!-- Routing Mode Toggle -->
+        <div class="tg routing-tg">
+          <span class="col-lbl">Style:</span>
+          <button class="tbtn mode-btn" class:active={$routingMode === 'orthogonal'} on:click={() => routingMode.set('orthogonal')} title="Orthogonal 90° Manhattan style">⎶</button>
+          <button class="tbtn mode-btn" class:active={$routingMode === 'curved'} on:click={() => routingMode.set('curved')} title="Smooth Bezier Curve">〰</button>
+          <button class="tbtn mode-btn" class:active={$routingMode === 'direct'} on:click={() => routingMode.set('direct')} title="Straight Direct Line">╱</button>
+        </div>
         <!-- Zoom -->
         <div class="tg">
           <button class="tbtn" on:click={() => canvasRef.zoomIn?.()}  title="Zoom In (+)">+</button>
@@ -389,6 +465,9 @@
         <div class="tg">
           <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()}    title="Grid (G)">⊞</button>
           <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Minimap (M)">🗺</button>
+          <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema Kanvas (Light / Dark)">
+            {isLightMode ? '☀️' : '🌙'}
+          </button>
           <button class="tbtn" on:click={undo} title="Undo Ctrl+Z">↩</button>
           <button class="tbtn" on:click={redo} title="Redo Ctrl+Y">↪</button>
         </div>
@@ -405,12 +484,12 @@
         </div>
         <!-- Shortcuts hint -->
         <div class="tg shortcuts-hint">
-          <span>V W L Del F Shift+F G M · Ctrl+Z/Y/D · ? Shortcuts</span>
+          <span>V W L Del F G M · Ctrl+K / · ? Shortcuts</span>
         </div>
       </div>
 
       <!-- CANVAS -->
-      <Canvas bind:api={canvasRef}/>
+      <Canvas bind:api={canvasRef} {isLightMode}/>
     </div>
 
     <!-- RIGHT SIDEBAR ───────────────────────────────── -->
@@ -474,6 +553,42 @@
       </div>
     </div>
   {/if}
+
+  <!-- Feature: Electrical Rules Check Modal -->
+  <ERCModal
+    bind:show={showERCModal}
+    {ercResult}
+    on:selectwire={e => {
+      selection.set({ id: e.detail, type: 'wire' })
+      showERCModal = false
+    }}
+    on:selectcomp={e => {
+      selection.set({ id: e.detail, type: 'component' })
+      showERCModal = false
+    }}
+  />
+
+  <!-- Feature: Pin-Definition Code Generator Modal -->
+  <CodeGenModal
+    bind:show={showCodeGenModal}
+    components={$compsStore}
+    wires={$wiresStore}
+    {projectName}
+  />
+
+  <!-- Feature: Wokwi Simulator Export Modal -->
+  <WokwiModal
+    bind:show={showWokwiModal}
+    components={$compsStore}
+    wires={$wiresStore}
+    {projectName}
+  />
+
+  <!-- Feature: Quick Component Search Palette -->
+  <QuickPaletteModal
+    bind:show={showQuickPalette}
+    on:added={() => flash('Komponen ditambahkan ke kanvas ✓')}
+  />
 </div>
 
 <style>
@@ -509,6 +624,20 @@
   .btn-pri{ background:#4f9cf9; color:#fff; border-color:#2176d9; }
   .btn-pri:hover{ background:#2176d9; }
   .flash{ font-size:12px; color:#4ade80; font-weight:600; }
+
+  .btn-search { background: #1a1a38; border-color: #3b3b70; color: #a5b4fc; }
+  .btn-search:hover { background: #252555; color: #fff; border-color: #6366f1; }
+  .shortcut-tag { font-size: 10px; background: #252545; padding: 1px 5px; border-radius: 3px; color: #94a3b8; }
+
+  .btn-erc { display: inline-flex; align-items: center; gap: 6px; }
+  .badge-erc { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+  .badge-erc-err { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
+  .badge-erc-warn { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
+  .badge-erc-ok { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid #4ade80; }
+
+  .routing-tg { gap: 2px; }
+  .mode-btn { font-size: 11px; font-weight: 600; padding: 4px 6px; }
+  .theme-toggle-btn { font-size: 12px; font-weight: 600; }
 
   /* Body */
   .body{ display:flex; flex:1; overflow:hidden; }

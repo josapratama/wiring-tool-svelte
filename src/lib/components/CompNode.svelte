@@ -17,6 +17,8 @@
   export let scale     = 1      // BUG FIX #1: passed from Canvas
   export let usedPins  = new Set()  // Feature #5: set of connected pin IDs
   export let isLightMode = false
+  export let compatiblePins = null
+  export let activeWireSourceKey = null
 
   const dispatch = createEventDispatcher()
 
@@ -221,10 +223,18 @@
       {@const isGnd   = pin.type === 'gnd'}
       {@const netName = getPowerNet(pin.id, pin.label)}
       {@const isPwr   = !isGnd && pin.type === 'power' && netName}
-      <circle class="pin-dot" cx={0} cy={py} r={PIN_R}
+      {@const pinKey  = `${comp.instanceId}::${pin.id}`}
+      {@const isSrc   = activeWireSourceKey === pinKey}
+      {@const isCompat = compatiblePins ? compatiblePins.has(pinKey) : false}
+      {@const isDim   = compatiblePins && !isCompat && !isSrc}
+      {#if isCompat}
+        <circle cx={0} cy={py} r={PIN_R + 5} fill="none" stroke="#4ade80" stroke-width="2" class="glow-ring" pointer-events="none"/>
+      {/if}
+      <circle class="pin-dot" class:pin-compatible={isCompat} class:pin-source={isSrc} class:pin-dimmed={isDim}
+        cx={0} cy={py} r={PIN_R}
         fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
         data-pin={pin.id} data-comp={comp.instanceId}>
-        <title>GPIO{pin.num} — {pin.label} ({pin.type}){used ? ' ✓ connected' : ''}</title>
+        <title>GPIO{pin.num} — {pin.label} ({pin.type}){used ? ' ✓ connected' : ''}{isCompat ? ' ✦ COMPATIBLE TARGET' : ''}</title>
       </circle>
       {#if isGnd}
         {@const gs = gndSymbol(0, py, 'left')}
@@ -249,10 +259,18 @@
       {@const isGnd   = pin.type === 'gnd'}
       {@const netName = getPowerNet(pin.id, pin.label)}
       {@const isPwr   = !isGnd && pin.type === 'power' && netName}
-      <circle class="pin-dot" cx={comp.width} cy={py} r={PIN_R}
+      {@const pinKey  = `${comp.instanceId}::${pin.id}`}
+      {@const isSrc   = activeWireSourceKey === pinKey}
+      {@const isCompat = compatiblePins ? compatiblePins.has(pinKey) : false}
+      {@const isDim   = compatiblePins && !isCompat && !isSrc}
+      {#if isCompat}
+        <circle cx={comp.width} cy={py} r={PIN_R + 5} fill="none" stroke="#4ade80" stroke-width="2" class="glow-ring" pointer-events="none"/>
+      {/if}
+      <circle class="pin-dot" class:pin-compatible={isCompat} class:pin-source={isSrc} class:pin-dimmed={isDim}
+        cx={comp.width} cy={py} r={PIN_R}
         fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
         data-pin={pin.id} data-comp={comp.instanceId}>
-        <title>GPIO{pin.num} — {pin.label} ({pin.type}){used ? ' ✓ connected' : ''}</title>
+        <title>GPIO{pin.num} — {pin.label} ({pin.type}){used ? ' ✓ connected' : ''}{isCompat ? ' ✦ COMPATIBLE TARGET' : ''}</title>
       </circle>
       {#if isGnd}
         {@const gs = gndSymbol(comp.width, py, 'right')}
@@ -282,10 +300,18 @@
       {@const cx = pin.side==='left' ? 0 : pin.side==='right' ? W : W*(isFinite(pin.pos) ? pin.pos : 0.5)}
       {@const cy = pin.side==='top'  ? 0 : pin.side==='bottom'? H
                    : TITLE_H + (H - TITLE_H) * (isFinite(pin.pos) ? pin.pos : 0.5)}
-      <circle class="pin-dot" cx={cx} cy={cy} r={PIN_R}
+      {@const pinKey  = `${comp.instanceId}::${pin.id}`}
+      {@const isSrc   = activeWireSourceKey === pinKey}
+      {@const isCompat = compatiblePins ? compatiblePins.has(pinKey) : false}
+      {@const isDim   = compatiblePins && !isCompat && !isSrc}
+      {#if isCompat}
+        <circle cx={cx} cy={cy} r={PIN_R + 5} fill="none" stroke="#4ade80" stroke-width="2" class="glow-ring" pointer-events="none"/>
+      {/if}
+      <circle class="pin-dot" class:pin-compatible={isCompat} class:pin-source={isSrc} class:pin-dimmed={isDim}
+        cx={cx} cy={cy} r={PIN_R}
         fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
         data-pin={pin.id} data-comp={comp.instanceId}>
-        <title>{pin.label} ({pin.type}){used ? ' ✓ connected' : ''}</title>
+        <title>{pin.label} ({pin.type}){used ? ' ✓ connected' : ''}{isCompat ? ' ✦ COMPATIBLE TARGET' : ''}</title>
       </circle>
       {#if isGnd}
         {@const gs = gndSymbol(cx, cy, pin.side)}
@@ -328,7 +354,28 @@
   .pin-label   { font:600 11px/1 'Consolas','Courier New',monospace; fill:#dde2f0; pointer-events:none; }
   .pin-num     { font:9px/1 'Consolas',monospace; fill:#505080; pointer-events:none; }
   .comp-prop   { font:11px/1 'Consolas',monospace; fill:#8888aa; pointer-events:none; }
-  .pin-dot     { cursor:crosshair; transition:r 0.12s; }
+  .pin-dot     { cursor:crosshair; transition:r 0.12s, opacity 0.15s; }
   .pin-dot:hover { r:10; stroke:#fff !important; stroke-width:2 !important; }
+  .pin-compatible {
+    stroke: #4ade80 !important;
+    stroke-width: 2.5px !important;
+    filter: drop-shadow(0 0 5px #4ade80);
+  }
+  .pin-source {
+    stroke: #f59e0b !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 6px #f59e0b);
+  }
+  .pin-dimmed {
+    opacity: 0.35;
+  }
+  .glow-ring {
+    animation: ring-pulse 1.3s ease-in-out infinite;
+  }
+  @keyframes ring-pulse {
+    0%   { r: 9px; opacity: 0.95; stroke-width: 2px; }
+    50%  { r: 14px; opacity: 0.2; stroke-width: 1px; }
+    100% { r: 9px; opacity: 0.95; stroke-width: 2px; }
+  }
   .pwr-label   { font:700 9px/1 'Consolas',monospace; pointer-events:none; }
 </style>

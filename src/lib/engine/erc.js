@@ -22,7 +22,7 @@ const POWER_IDENTIFIERS = {
   '+': 5
 }
 
-function normalizePin(comp, pinId) {
+export function normalizePin(comp, pinId) {
   if (!comp) return null
   let pin = null
   if (comp.isMCU && MCU_PINS[comp.id]) {
@@ -65,6 +65,104 @@ function normalizePin(comp, pinId) {
     uartRole,
     compLabel: comp.label || comp.id
   }
+}
+
+/**
+ * Discovers compatible target pins when dragging a wire from sourcePin.
+ * Returns a Set of keys: `${targetCompInstanceId}::${targetPinId}`
+ */
+export function findCompatiblePins(sourceComp, sourcePinId, allComponents = []) {
+  if (!sourceComp || !sourcePinId) return new Set()
+  const src = normalizePin(sourceComp, sourcePinId)
+  if (!src) return new Set()
+
+  const compatibleKeys = new Set()
+  const srcLabel = (src.label || src.id || '').toUpperCase()
+
+  allComponents.forEach(comp => {
+    if (comp.instanceId === sourceComp.instanceId) return
+
+    const pins = comp.isMCU && MCU_PINS[comp.id]
+      ? [...(MCU_PINS[comp.id].left || []), ...(MCU_PINS[comp.id].right || [])]
+      : (comp.pins || [])
+
+    pins.forEach(p => {
+      const target = normalizePin(comp, p.id)
+      if (!target) return
+      const tgtLabel = (target.label || target.id || '').toUpperCase()
+      const key = `${comp.instanceId}::${p.id}`
+
+      // Rule 1: GND connects to GND
+      if (src.isGnd) {
+        if (target.isGnd) compatibleKeys.add(key)
+        return
+      }
+
+      // Rule 2: Power connects to Power / VCC / matching voltage
+      if (src.voltage != null || src.type === 'power') {
+        if (target.isGnd) return // short
+        if (target.type === 'power' || target.voltage != null || target.type === 'passive') {
+          if (!src.voltage || !target.voltage || Math.abs(src.voltage - target.voltage) < 0.5) {
+            compatibleKeys.add(key)
+          }
+        }
+        return
+      }
+
+      // Rule 3: UART TX connects to RX, RX connects to TX
+      if (src.uartRole === 'TX') {
+        if (target.uartRole === 'RX' || tgtLabel.includes('RX')) compatibleKeys.add(key)
+        return
+      }
+      if (src.uartRole === 'RX') {
+        if (target.uartRole === 'TX' || tgtLabel.includes('TX')) compatibleKeys.add(key)
+        return
+      }
+
+      // Rule 4: I2C (SDA -> SDA, SCL -> SCL)
+      if (srcLabel.includes('SDA') || (src.type === 'i2c' && srcLabel.includes('SDA'))) {
+        if (tgtLabel.includes('SDA') || target.type === 'i2c') compatibleKeys.add(key)
+        return
+      }
+      if (srcLabel.includes('SCL') || (src.type === 'i2c' && srcLabel.includes('SCL'))) {
+        if (tgtLabel.includes('SCL') || target.type === 'i2c') compatibleKeys.add(key)
+        return
+      }
+
+      // Rule 5: SPI (MOSI -> MOSI, MISO -> MISO, SCK -> SCK, CS -> CS)
+      if (srcLabel.includes('MOSI') || srcLabel.includes('SDI') || srcLabel.includes('SI')) {
+        if (tgtLabel.includes('MOSI') || tgtLabel.includes('SDI') || tgtLabel.includes('SI') || target.type === 'spi') compatibleKeys.add(key)
+        return
+      }
+      if (srcLabel.includes('MISO') || srcLabel.includes('SDO') || srcLabel.includes('SO')) {
+        if (tgtLabel.includes('MISO') || tgtLabel.includes('SDO') || tgtLabel.includes('SO') || target.type === 'spi') compatibleKeys.add(key)
+        return
+      }
+      if (srcLabel.includes('SCK') || srcLabel.includes('CLK')) {
+        if (tgtLabel.includes('SCK') || tgtLabel.includes('CLK') || target.type === 'spi') compatibleKeys.add(key)
+        return
+      }
+      if (srcLabel.includes('CS') || srcLabel.includes('SS')) {
+        if (tgtLabel.includes('CS') || tgtLabel.includes('SS') || target.type === 'spi' || target.type === 'digital') compatibleKeys.add(key)
+        return
+      }
+
+      // Rule 6: General Digital / Analog / GPIO
+      if (!target.isGnd && target.type !== 'power') {
+        if (src.type === 'analog' && (target.type === 'analog' || target.type === 'passive')) {
+          compatibleKeys.add(key)
+        } else if (src.type === 'digital' || src.type === 'gpio' || src.type === 'pwm') {
+          if (target.type === 'digital' || target.type === 'gpio' || target.type === 'pwm' || target.type === 'passive') {
+            compatibleKeys.add(key)
+          }
+        } else if (src.type === 'passive' || target.type === 'passive') {
+          compatibleKeys.add(key)
+        }
+      }
+    })
+  })
+
+  return compatibleKeys
 }
 
 /**

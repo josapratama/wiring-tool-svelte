@@ -35,8 +35,8 @@
 {#if show}
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div class="modal-backdrop" on:click={() => show = false}>
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-    <div class="modal-box" on:click|stopPropagation role="dialog" aria-label="Auto Pin Definitions Generator">
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions a11y-interactive-supports-focus -->
+    <div class="modal-box" on:click|stopPropagation role="dialog" aria-label="Auto Pin Definitions Generator" tabindex="-1">
       <div class="modal-head">
         <div class="head-left">
           <span>💻 Auto Pin-Definition Code Generator</span>

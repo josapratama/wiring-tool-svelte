@@ -151,23 +151,46 @@ function hashStr(s) {
 }
 
 /**
- * Orthogonal wire routing with improved fan-out.
- *
- * Each wire gets a unique "lane" based on:
- *   1. wireIndex  — position in the wires array
- *   2. A hash of its endpoint positions — stable across undo/redo
- *
- * The lane offset shifts the MIDDLE segment so parallel wires in the
- * same corridor are visually separated.
+ * Wire routing supporting Orthogonal (Manhattan), Curved (Bezier), and Direct.
  */
-export function routeWire(p1, p2, wireIndex = 0) {
+export function routeWire(p1, p2, wireIndex = 0, mode = "orthogonal") {
+  if (mode === "direct") {
+    const pts = [p1, p2];
+    return { d: `M ${r(p1.x)} ${r(p1.y)} L ${r(p2.x)} ${r(p2.y)}`, pts };
+  }
+
+  const s1 = stub(p1);
+  const s2 = stub(p2);
+
+  if (mode === "curved") {
+    // Smooth cubic bezier with pin stubs acting as tangent control handles
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const dist = Math.hypot(dx, dy);
+    const handleLen = Math.min(Math.max(dist * 0.45, 40), 160);
+
+    const c1 = {
+      x: p1.side === 'left' ? p1.x - handleLen : p1.side === 'right' ? p1.x + handleLen : p1.x,
+      y: p1.side === 'top' ? p1.y - handleLen : p1.side === 'bottom' ? p1.y + handleLen : p1.y
+    };
+    const c2 = {
+      x: p2.side === 'left' ? p2.x - handleLen : p2.side === 'right' ? p2.x + handleLen : p2.x,
+      y: p2.side === 'top' ? p2.y - handleLen : p2.side === 'bottom' ? p2.y + handleLen : p2.y
+    };
+
+    const pts = [p1, c1, c2, p2];
+    return {
+      d: `M ${r(p1.x)} ${r(p1.y)} C ${r(c1.x)} ${r(c1.y)}, ${r(c2.x)} ${r(c2.y)}, ${r(p2.x)} ${r(p2.y)}`,
+      pts
+    };
+  }
+
+  // Orthogonal wire routing with lane fan-out
   const key = `${Math.round(p1.x)},${Math.round(p1.y)},${Math.round(p2.x)},${Math.round(p2.y)}`;
   const hashOff = (hashStr(key) % 4) * 12; // 0, 12, 24, 36 px bands
   const sign = wireIndex % 2 === 0 ? 1 : -1;
   const lane = sign * (Math.floor(wireIndex / 2) * 20 + hashOff);
 
-  const s1 = stub(p1);
-  const s2 = stub(p2);
   const h1 = p1.side === "left" || p1.side === "right";
   const h2 = p2.side === "left" || p2.side === "right";
   const pts = [p1, s1];
@@ -192,8 +215,14 @@ export function routeWire(p1, p2, wireIndex = 0) {
 }
 
 /** Preview path (cursor to pin) */
-export function routePreview(p1, cx, cy) {
+export function routePreview(p1, cx, cy, mode = "orthogonal") {
+  if (mode === "direct") {
+    return `M ${r(p1.x)} ${r(p1.y)} L ${r(cx)} ${r(cy)}`;
+  }
   const s1 = stub(p1);
+  if (mode === "curved") {
+    return `M ${r(p1.x)} ${r(p1.y)} Q ${r(s1.x)} ${r(s1.y)}, ${r(cx)} ${r(cy)}`;
+  }
   const mx = (s1.x + cx) / 2;
   const pts = [p1, s1, { x: mx, y: s1.y }, { x: mx, y: cy }, { x: cx, y: cy }];
   return toPath(pts);

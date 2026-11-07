@@ -24,6 +24,7 @@ export const labels = writable([]);
 export const selection = writable(null); // { id, type }
 export const multiSelection = writable([]); // [{ id, type }]
 export const activeTool = writable("select");
+export const routingMode = writable("orthogonal"); // 'orthogonal' | 'curved' | 'direct'
 
 // ── History ───────────────────────────────────────────────
 const undoStack = [];
