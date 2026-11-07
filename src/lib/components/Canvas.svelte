@@ -822,7 +822,7 @@
 
     <g transform="translate({svgVx},{svgVy}) scale({svgVscale})">
       <!-- Wires layer -->
-      <WireLayer {previewData} {wireColor} snapTargetPin={snapTarget} {highlightedWireIds}/>
+      <WireLayer components={$components} {previewData} {wireColor} snapTargetPin={snapTarget} {highlightedWireIds}/>
 
       <!-- Labels -->
       {#each $labels as lbl (lbl.id)}

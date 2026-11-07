@@ -8,26 +8,34 @@
    *  - Full data-wire-id for context menu & selection hit-testing
    */
   import { pinPos, routeWire, routePreview, pathMidpoint, labelPos } from '$lib/engine/geometry.js'
-  import { wires, components, selection, activeTool, removeWire, routingMode } from '$lib/store/diagram.js'
+  import { wires, components as componentsStore, selection, activeTool, removeWire, routingMode } from '$lib/store/diagram.js'
 
+  export let components = null
   export let previewData        = null
   export let wireColor          = '#ef4444'
   export let snapTargetPin      = null
   export let highlightedWireIds = new Set()
 
-  function getComp(id) { return $components.find(c => c.instanceId === id) }
+  $: currentComponents = components || $componentsStore
 
-  $: normalWires = $wires.map((w, i) => {
-    const fc = getComp(w.fromComp), tc = getComp(w.toComp)
-    if (!fc || !tc) return null
-    const p1 = pinPos(fc)(w.fromPin)
-    const p2 = pinPos(tc)(w.toPin)
-    if (!p1 || !p2) return null
-    const { d, pts } = routeWire(p1, p2, i, w.routingMode || $routingMode)
-    const mid  = pathMidpoint(pts)
-    const lpos = labelPos(pts)
-    return { d, pts, p1, p2, mid, lpos, wire: w }
-  }).filter(Boolean)
+  $: normalWires = (() => {
+    const cs = currentComponents
+    const ws = $wires
+    const rm = $routingMode
+    if (!cs || !ws) return []
+    return ws.map((w, i) => {
+      const fc = cs.find(c => c.instanceId === w.fromComp)
+      const tc = cs.find(c => c.instanceId === w.toComp)
+      if (!fc || !tc) return null
+      const p1 = pinPos(fc)(w.fromPin)
+      const p2 = pinPos(tc)(w.toPin)
+      if (!p1 || !p2) return null
+      const { d, pts } = routeWire(p1, p2, i, w.routingMode || rm)
+      const mid  = pathMidpoint(pts)
+      const lpos = labelPos(pts)
+      return { d, pts, p1, p2, mid, lpos, wire: w }
+    }).filter(Boolean)
+  })()
 
   $: labeledWires = (() => {
     const labeled = normalWires.filter(r => r.wire.label)
