@@ -90,7 +90,10 @@
                   on:keydown={(e) => e.key==='Enter' && onDrop(item.id, null, null)}
                 >
                   <span class="comp-icon">✨</span>
-                  <span class="comp-name">{@html highlight(item.name || item.id)}</span>
+                  <div class="comp-text">
+                    <span class="comp-name">{@html highlight(item.name || item.id)}</span>
+                  </div>
+                  <button class="btn-add-mini" on:click|stopPropagation={() => onDrop(item.id, null, null)} title="Pasang ke kanvas">+</button>
                   <button class="btn-del-mini" on:click={(e) => handleDeleteCustom(e, item.id)} title="Delete">✕</button>
                 </div>
               {/each}
@@ -108,8 +111,9 @@
           <!-- svelte-ignore a11y-click-events-have-key-events -->
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div class="cat-header" on:click={() => toggle(cat.id)}>
-            <span>{cat.icon}</span>
-            <span>{cat.label}</span>
+            <span class="cat-icon-badge">{cat.icon}</span>
+            <span class="cat-title">{cat.label}</span>
+            <span class="cat-count">({items.length})</span>
             <span class="arrow" class:collapsed={collapsed[cat.id]}>▾</span>
           </div>
 
@@ -128,7 +132,15 @@
                   on:keydown={(e) => e.key==='Enter' && onDrop(item.id, null, null)}
                 >
                   <span class="comp-icon">{cat.icon}</span>
-                  <span class="comp-name">{@html highlight(item.name)}</span>
+                  <div class="comp-text">
+                    <span class="comp-name">{@html highlight(item.name)}</span>
+                    {#if item.desc}
+                      <span class="comp-desc">{item.desc}</span>
+                    {/if}
+                  </div>
+                  <button class="btn-add-mini" on:click|stopPropagation={() => onDrop(item.id, null, null)} title="Pasang ke kanvas">
+                    +
+                  </button>
                 </div>
               {/each}
             </div>
@@ -144,74 +156,87 @@
 
 <style>
   .sidebar {
-    width: 200px; flex-shrink: 0; background: #13132a;
-    border-right: 2px solid #252545; display: flex; flex-direction: column;
-    overflow: hidden;
+    width: 220px; flex-shrink: 0; background: #111827;
+    border-right: 1px solid #1f2937; display: flex; flex-direction: column;
+    overflow: hidden; height: 100%;
   }
   .sidebar-head {
-    padding: 10px 10px 8px;
-    border-bottom: 1px solid #252545;
-    display: flex; flex-direction: column; gap: 7px;
+    padding: 12px 12px 10px;
+    border-bottom: 1px solid #1f2937;
+    display: flex; flex-direction: column; gap: 8px; background: #0f172a;
   }
   .head-top {
     display: flex; align-items: center; justify-content: space-between;
   }
   .sidebar-title {
-    font: 700 10px/1 sans-serif; text-transform: uppercase;
-    letter-spacing: 1px; color: #4f9cf9;
+    font: 700 11px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    text-transform: uppercase; letter-spacing: 0.8px; color: #38bdf8;
   }
   .btn-new-custom {
-    background: #1e3a5f; border: 1px solid #3b82f6; border-radius: 4px;
-    padding: 3px 7px; color: #60a5fa; font-size: 10px; font-weight: 700;
-    cursor: pointer; transition: all 0.15s;
+    background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 4px; padding: 4px 8px; color: #38bdf8; font-size: 10px;
+    font-weight: 700; cursor: pointer; transition: all 0.15s;
   }
-  .btn-new-custom:hover { background: #2563eb; color: #fff; }
+  .btn-new-custom:hover { background: #0284c7; color: #fff; border-color: #0284c7; }
   .search {
-    background: #0d0d1a; border: 1px solid #353565; border-radius: 4px;
-    padding: 5px 9px; color: #e8e8f5; font-size: 12px; outline: none;
-    transition: border-color 0.15s;
+    background: #030712; border: 1px solid #374151; border-radius: 6px;
+    padding: 6px 10px; color: #f9fafb; font-size: 12px; outline: none;
+    transition: all 0.15s;
   }
-  .search:focus { border-color: #4f9cf9; }
-  .search::placeholder { color: #404060; }
+  .search:focus { border-color: #38bdf8; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
+  .search::placeholder { color: #6b7280; }
 
-  .library { flex: 1; overflow-y: auto; padding: 6px 5px; }
+  .library { flex: 1; overflow-y: auto; padding: 8px 6px; }
   .library::-webkit-scrollbar { width: 4px; }
-  .library::-webkit-scrollbar-thumb { background: #353565; border-radius: 2px; }
+  .library::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
 
   .category { margin-bottom: 8px; }
   .cat-header {
     display: flex; align-items: center; gap: 6px;
-    font: 700 10px/1 sans-serif; text-transform: uppercase; letter-spacing: 0.8px;
-    color: #4f9cf9; padding: 4px 6px; border-bottom: 1px solid #1e1e3a;
-    cursor: pointer; user-select: none; margin-bottom: 4px;
+    font: 700 11px/1 -apple-system, sans-serif;
+    color: #94a3b8; padding: 6px 8px; border-radius: 4px;
+    cursor: pointer; user-select: none; margin-bottom: 3px;
+    transition: all 0.12s;
   }
-  .cat-header:hover { color: #e8e8f5; }
-  .custom-cat { color: #facc15; border-bottom-color: #353005; }
-  .arrow { margin-left: auto; font-size: 10px; transition: transform 0.2s; }
+  .cat-header:hover { color: #f8fafc; background: #1e293b; }
+  .cat-icon-badge { font-size: 13px; }
+  .cat-title { font-weight: 600; flex: 1; }
+  .cat-count { font-size: 10px; color: #64748b; font-weight: 500; }
+  .custom-cat { color: #facc15; }
+  .arrow { font-size: 10px; transition: transform 0.2s; color: #64748b; }
   .arrow.collapsed { transform: rotate(-90deg); }
 
-  .items { display: flex; flex-direction: column; gap: 2px; }
+  .items { display: flex; flex-direction: column; gap: 3px; }
   .comp-item {
     display: flex; align-items: center; gap: 8px;
-    padding: 7px 8px; border-radius: 4px;
-    background: #1a1a35; border: 1px solid #252545;
+    padding: 6px 8px; border-radius: 6px;
+    background: #1e293b; border: 1px solid rgba(255, 255, 255, 0.05);
     cursor: grab; user-select: none;
-    transition: all 0.1s; position: relative;
+    transition: all 0.12s; position: relative;
   }
   .comp-item:hover {
-    background: #22224a; border-color: #4f9cf9;
-    transform: translateX(2px); box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    background: #273549; border-color: #38bdf8;
+    transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
   .custom-item { border-left: 3px solid #facc15; }
   .comp-item:active { cursor: grabbing; }
   .comp-icon { font-size: 14px; flex-shrink: 0; width: 18px; text-align: center; }
-  .comp-name { font-size: 11px; color: #9090b8; line-height: 1.3; flex: 1; }
+  .comp-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .comp-name { font-size: 11.5px; font-weight: 500; color: #e2e8f0; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .comp-desc { font-size: 9.5px; color: #94a3b8; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
   :global(.comp-name mark) {
-    background: #4f9cf9; color: #fff; border-radius: 2px; padding: 0 1px;
+    background: #38bdf8; color: #000; border-radius: 2px; padding: 0 2px; font-weight: 700;
   }
+  .btn-add-mini {
+    background: #0f172a; border: 1px solid #334155; color: #38bdf8;
+    cursor: pointer; font-size: 13px; font-weight: 700; width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; opacity: 0.7; transition: all 0.12s; flex-shrink: 0;
+  }
+  .btn-add-mini:hover, .comp-item:hover .btn-add-mini { opacity: 1; background: #0284c7; color: #fff; border-color: #0284c7; }
   .btn-del-mini {
-    background: transparent; border: none; color: #505070;
-    cursor: pointer; font-size: 10px; padding: 2px 4px; border-radius: 3px;
+    background: transparent; border: none; color: #64748b;
+    cursor: pointer; font-size: 10px; padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
   }
-  .btn-del-mini:hover { color: #f87171; background: #2a1010; }
+  .btn-del-mini:hover { color: #f87171; background: #371717; }
 </style>

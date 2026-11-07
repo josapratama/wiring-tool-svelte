@@ -32,6 +32,16 @@
   let showWokwiModal = false
   let showQuickPalette = false
 
+  // Responsive sidebars & export menu
+  let showLeftSidebar = true
+  let showRightSidebar = true
+  let showExportMenu = false
+
+  function toggleLeftSidebar() { showLeftSidebar = !showLeftSidebar }
+  function toggleRightSidebar() { showRightSidebar = !showRightSidebar }
+  function toggleExportMenu(e) { e.stopPropagation(); showExportMenu = !showExportMenu }
+  function closeExportMenu() { showExportMenu = false }
+
   // Reactive ERC analysis
   $: ercResult = runERC($compsStore, $wiresStore)
 
@@ -337,6 +347,11 @@
 
   // ── Feature #9: Auto-save restore on mount ────────────
   onMount(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      showLeftSidebar = false
+      showRightSidebar = false
+    }
+
     try {
       const savedTheme = localStorage.getItem('wiretool_theme')
       if (savedTheme === 'light') isLightMode = true
@@ -363,21 +378,26 @@
   $: curTool = $activeTool
 </script>
 
-<svelte:window on:keydown={onKeyDown}/>
+<svelte:window on:keydown={onKeyDown} on:click={closeExportMenu}/>
 
-<div class="app">
+<div class="app" class:light-app={isLightMode}>
   <!-- HEADER ─────────────────────────────────────────── -->
   <header class="hdr">
     <div class="hdr-l">
+      <!-- Toggle Left Sidebar Button -->
+      <button class="nav-toggle-btn" on:click={toggleLeftSidebar} title="Buka/Tutup Komponen" class:btn-active={showLeftSidebar}>
+        📦 <span class="nav-toggle-lbl">Komponen</span>
+      </button>
+
       <div class="logo">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <rect x="2" y="5" width="7" height="14" rx="1.5" fill="#4f9cf9" stroke="#2176d9" stroke-width="1.5"/>
-          <rect x="15" y="5" width="7" height="14" rx="1.5" fill="#f97316" stroke="#d94f21" stroke-width="1.5"/>
+          <rect x="2" y="5" width="7" height="14" rx="2" fill="#38bdf8" stroke="#0284c7" stroke-width="1.5"/>
+          <rect x="15" y="5" width="7" height="14" rx="2" fill="#f97316" stroke="#ea580c" stroke-width="1.5"/>
           <path d="M9 8.5h6M9 12h6M9 15.5h6" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        <span>WireTool</span>
+        <span class="logo-text">WireTool</span>
       </div>
-      <span class="badge">v2.1</span>
+      <span class="badge">v2.2</span>
     </div>
 
     <div class="hdr-c">
@@ -387,13 +407,15 @@
         contenteditable="true"
         role="textbox"
         aria-label="Project name"
+        title="Klik untuk mengubah nama proyek"
         on:blur={e => projectName = e.target.textContent.trim()}
         on:keydown={e => e.key==='Enter' && e.target.blur()}
       >{projectName}</span>
     </div>
 
     <div class="hdr-r">
-      <button class="btn btn-search" on:click={() => showQuickPalette = true} title="Cari & Pasang Komponen (Ctrl+K atau /)">
+      <!-- Search Palette -->
+      <button class="btn btn-search" on:click={() => showQuickPalette = true} title="Cari Komponen Cepat (Ctrl+K atau /)">
         🔍 <span class="shortcut-tag">Ctrl+K</span>
       </button>
 
@@ -410,38 +432,101 @@
       </button>
 
       <!-- Code generator button -->
-      <button class="btn" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
-        💻 Code
+      <button class="btn btn-code" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
+        💻 <span class="btn-text">Code</span>
       </button>
 
-      <!-- Wokwi simulator export -->
-      <button class="btn" on:click={() => showWokwiModal = true} title="Export to Wokwi Simulator">
-        🚀 Wokwi
+      <!-- Export Dropdown -->
+      <div class="dropdown-wrap">
+        <button class="btn btn-pri" on:click={toggleExportMenu} title="Export diagram to multiple formats">
+          📤 <span class="btn-text">Export</span> <span class="arrow-down">▾</span>
+        </button>
+
+        {#if showExportMenu}
+          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+          <div class="export-dropdown" on:click|stopPropagation>
+            <div class="dd-title">Pilih Format Ekspor</div>
+            <button class="dd-item" on:click={() => { exportPNG(); showExportMenu = false }}>
+              <span class="dd-icon">🖼</span>
+              <div class="dd-info">
+                <span class="dd-label">Gambar High-Res (PNG)</span>
+                <span class="dd-desc">Untuk dokumentasi skema atau laporan</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { exportSVG(); showExportMenu = false }}>
+              <span class="dd-icon">📐</span>
+              <div class="dd-info">
+                <span class="dd-label">Vector Graphic (SVG)</span>
+                <span class="dd-desc">Grafik vektor tajam tanpa pecah</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { exportJSON(); showExportMenu = false }}>
+              <span class="dd-icon">💾</span>
+              <div class="dd-info">
+                <span class="dd-label">Diagram JSON (.json)</span>
+                <span class="dd-desc">Simpan untuk diedit kembali nanti</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { showWokwiModal = true; showExportMenu = false }}>
+              <span class="dd-icon">🚀</span>
+              <div class="dd-info">
+                <span class="dd-label">Wokwi Simulator JSON</span>
+                <span class="dd-desc">Jalankan simulasi langsung di browser</span>
+              </div>
+            </button>
+            <div class="dd-divider"></div>
+            <button class="dd-item" on:click={() => { exportNetlist(); showExportMenu = false }}>
+              <span class="dd-icon">🔌</span>
+              <div class="dd-info">
+                <span class="dd-label">Netlist Connections (CSV)</span>
+                <span class="dd-desc">Daftar koneksi antar-pin dan kabel</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { exportBOM(); showExportMenu = false }}>
+              <span class="dd-icon">📋</span>
+              <div class="dd-info">
+                <span class="dd-label">Bill of Materials (BOM)</span>
+                <span class="dd-desc">Daftar kuantitas & spesifikasi part</span>
+              </div>
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <button class="btn btn-secondary-icon" on:click={importJSON} title="Import Diagram JSON">↑ <span class="btn-text">Import</span></button>
+      <button class="btn btn-secondary-icon" on:click={() => showStats = !showStats} title="Diagram Stats">📊</button>
+      <button class="btn btn-secondary-icon" on:click={() => showShortcuts = !showShortcuts} title="Shortcuts (?)">⌨</button>
+      <button class="btn btn-secondary-icon btn-clear" on:click={() => { if(confirm('Clear diagram?')){ pushHistory(); clearDiagram() } }} title="Clear Diagram">🗑</button>
+
+      <!-- Toggle Right Inspector Button -->
+      <button class="nav-toggle-btn" on:click={toggleRightSidebar} title="Buka/Tutup Panel Properties" class:btn-active={showRightSidebar}>
+        ⚙️ <span class="nav-toggle-lbl">Properties</span>
       </button>
 
-      <button class="btn"         on:click={importJSON}>↑ Import</button>
-      <button class="btn"         on:click={exportJSON}>↓ JSON</button>
-      <button class="btn"         on:click={exportSVG}>📐 SVG</button>
-      <button class="btn btn-pri" on:click={exportPNG}>🖼 PNG</button>
-      <button class="btn"         on:click={exportNetlist} title="Export Netlist CSV">🔌 Netlist</button>
-      <button class="btn"         on:click={exportBOM} title="Export Bill of Materials CSV">📋 BOM</button>
-      <button class="btn"         on:click={() => showStats = !showStats} title="Diagram Stats">📊</button>
-      <button class="btn"         on:click={() => showShortcuts = !showShortcuts} title="Shortcuts (?)">⌨</button>
-      <button class="btn"         on:click={() => { if(confirm('Clear diagram?')){ pushHistory(); clearDiagram() } }}>Clear</button>
       {#if flashMsg}<span class="flash">{flashMsg}</span>{/if}
     </div>
   </header>
 
   <div class="body">
-    <!-- LEFT SIDEBAR ────────────────────────────────── -->
-    <Sidebar onDrop={handleDrop}/>
+    <!-- LEFT SIDEBAR (COMPONENTS) -->
+    {#if showLeftSidebar}
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="drawer-backdrop left-bd" on:click={() => showLeftSidebar = false}></div>
+      <div class="sidebar-wrapper left-wrap">
+        <div class="mobile-sidebar-head">
+          <span>📦 Library Komponen</span>
+          <button class="drawer-close-btn" on:click={() => showLeftSidebar = false}>✕</button>
+        </div>
+        <Sidebar onDrop={handleDrop}/>
+      </div>
+    {/if}
 
     <!-- CANVAS COLUMN ───────────────────────────────── -->
     <div class="canvas-col">
       <!-- TOOLBAR -->
       <div class="toolbar">
         <!-- Tools -->
-        <div class="tg">
+        <div class="tg tool-group">
           {#each TOOLS as t}
             <button class="tbtn" class:active={curTool===t.id}
               title={t.title} on:click={() => setTool(t.id)}>{t.icon}</button>
@@ -455,14 +540,14 @@
           <button class="tbtn mode-btn" class:active={$routingMode === 'direct'} on:click={() => routingMode.set('direct')} title="Straight Direct Line">╱</button>
         </div>
         <!-- Zoom -->
-        <div class="tg">
+        <div class="tg zoom-group">
           <button class="tbtn" on:click={() => canvasRef.zoomIn?.()}  title="Zoom In (+)">+</button>
           <button class="tbtn" on:click={() => canvasRef.zoomOut?.()}  title="Zoom Out (−)">−</button>
-          <button class="tbtn" on:click={() => canvasRef.fitView?.()}  title="Fit (F)">Fit</button>
+          <button class="tbtn" on:click={() => canvasRef.fitView?.()}  title="Fit View (F)">Fit</button>
           <button class="tbtn" on:click={() => canvasRef.zoomToSelection?.()} title="Zoom to Selection (Shift+F)">⬚</button>
         </div>
         <!-- Toggles -->
-        <div class="tg">
+        <div class="tg toggles-group">
           <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()}    title="Grid (G)">⊞</button>
           <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Minimap (M)">🗺</button>
           <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema Kanvas (Light / Dark)">
@@ -492,21 +577,28 @@
       <Canvas bind:api={canvasRef} {isLightMode}/>
     </div>
 
-    <!-- RIGHT SIDEBAR ───────────────────────────────── -->
-    <aside class="rsb">
-      <div class="rsb-head">Properties</div>
-      <PropertiesPanel/>
+    <!-- RIGHT SIDEBAR (PROPERTIES & TEMPLATES) ──────── -->
+    {#if showRightSidebar}
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="drawer-backdrop right-bd" on:click={() => showRightSidebar = false}></div>
+      <aside class="rsb sidebar-wrapper right-wrap">
+        <div class="rsb-head">
+          <span>Properties</span>
+          <button class="drawer-close-btn" on:click={() => showRightSidebar = false}>✕</button>
+        </div>
+        <PropertiesPanel/>
 
-      <!-- Templates -->
-      <div class="tpls">
-        <div class="tpls-title">Quick Templates</div>
-        {#each Object.entries(TEMPLATES) as [key, t]}
-          <button class="tpl-btn" on:click={() => loadTemplate(key)}>
-            <span>{t.icon}</span><span>{t.label}</span>
-          </button>
-        {/each}
-      </div>
-    </aside>
+        <!-- Templates -->
+        <div class="tpls">
+          <div class="tpls-title">Quick Templates</div>
+          {#each Object.entries(TEMPLATES) as [key, t]}
+            <button class="tpl-btn" on:click={() => loadTemplate(key)}>
+              <span>{t.icon}</span><span>{t.label}</span>
+            </button>
+          {/each}
+        </div>
+      </aside>
+    {/if}
   </div>
 
   <!-- Feature #7: Diagram Stats Overlay ───────────────── -->
@@ -595,134 +687,242 @@
 <style>
   :global(*,*::before,*::after){ box-sizing:border-box; margin:0; padding:0; }
   :global(html,body){ height:100%; overflow:hidden;
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    font-size:13px; background:#0d0d1a; color:#e8e8f5; }
-  :global(*){ scrollbar-width:thin; scrollbar-color:#353565 transparent; }
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    font-size:13px; background:#0b0f19; color:#f1f5f9; }
+  :global(*){ scrollbar-width:thin; scrollbar-color:#374151 transparent; }
 
-  .app{ display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  .app{ display:flex; flex-direction:column; height:100vh; overflow:hidden; background:#0b0f19; }
 
-  /* Header */
-  .hdr{ height:50px; background:#13132a; border-bottom:2px solid #252545;
-    display:flex; align-items:center; padding:0 14px; gap:10px;
-    flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,0.5); }
-  .hdr-l{ display:flex; align-items:center; gap:8px; min-width:150px; }
-  .hdr-c{ flex:1; display:flex; justify-content:center; }
-  .hdr-r{ display:flex; align-items:center; gap:6px; min-width:270px; justify-content:flex-end; }
+  /* ── Header ── */
+  .hdr{ height:52px; background:#0f172a; border-bottom:1px solid #1e293b;
+    display:flex; align-items:center; padding:0 12px; gap:8px;
+    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:40; }
+  .hdr-l{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .hdr-c{ flex:1; display:flex; justify-content:center; min-width:0; }
+  .hdr-r{ display:flex; align-items:center; gap:6px; justify-content:flex-end; flex-shrink:0; }
 
-  .logo{ display:flex; align-items:center; gap:7px; font-weight:800; font-size:16px; color:#4f9cf9; }
-  .badge{ background:#1e1e40; color:#6060a0; font-size:10px;
-    padding:2px 7px; border-radius:10px; border:1px solid #353565; }
-  .proj-name{ font-size:15px; font-weight:700; color:#e8e8f5; outline:none;
-    padding:4px 12px; border-radius:4px; border:1px solid transparent;
-    min-width:200px; text-align:center; transition:border-color .15s; }
-  .proj-name:focus{ border-color:#4f9cf9; background:#1a1a35; }
+  .logo{ display:flex; align-items:center; gap:7px; font-weight:800; font-size:15px; color:#38bdf8; }
+  .logo-text{ letter-spacing:-0.3px; }
+  .badge{ background:#1e293b; color:#94a3b8; font-size:10px; font-weight:600;
+    padding:2px 7px; border-radius:10px; border:1px solid #334155; }
 
-  .btn{ display:inline-flex; align-items:center; gap:4px; padding:6px 12px;
-    border-radius:4px; border:1px solid #353565; cursor:pointer;
-    font-size:12px; font-weight:600; background:transparent; color:#9090b8;
+  .proj-name{ font-size:14px; font-weight:600; color:#f8fafc; outline:none;
+    padding:4px 10px; border-radius:6px; border:1px solid transparent;
+    max-width:280px; text-align:center; transition:all .15s;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .proj-name:hover{ background:#1e293b; border-color:#334155; }
+  .proj-name:focus{ border-color:#38bdf8; background:#1e293b; box-shadow:0 0 0 2px rgba(56,189,248,0.2); }
+
+  /* Buttons */
+  .btn{ display:inline-flex; align-items:center; gap:5px; padding:6px 11px;
+    border-radius:6px; border:1px solid #334155; cursor:pointer;
+    font-size:12px; font-weight:600; background:#1e293b; color:#cbd5e1;
+    transition:all .12s; white-space:nowrap; user-select:none; }
+  .btn:hover{ background:#334155; color:#f8fafc; border-color:#475569; }
+  .btn-pri{ background:#0284c7; color:#fff; border-color:#0369a1; }
+  .btn-pri:hover{ background:#0369a1; }
+
+  .nav-toggle-btn{ display:inline-flex; align-items:center; gap:5px; padding:6px 9px;
+    border-radius:6px; border:1px solid #334155; cursor:pointer;
+    font-size:12px; font-weight:600; background:#1e293b; color:#94a3b8;
     transition:all .12s; }
-  .btn:hover{ background:#22224a; color:#e8e8f5; border-color:#4f9cf9; }
-  .btn-pri{ background:#4f9cf9; color:#fff; border-color:#2176d9; }
-  .btn-pri:hover{ background:#2176d9; }
-  .flash{ font-size:12px; color:#4ade80; font-weight:600; }
+  .nav-toggle-btn:hover{ background:#334155; color:#f8fafc; }
+  .nav-toggle-btn.btn-active{ background:#0369a1; color:#fff; border-color:#38bdf8; }
 
-  .btn-search { background: #1a1a38; border-color: #3b3b70; color: #a5b4fc; }
-  .btn-search:hover { background: #252555; color: #fff; border-color: #6366f1; }
-  .shortcut-tag { font-size: 10px; background: #252545; padding: 1px 5px; border-radius: 3px; color: #94a3b8; }
+  .btn-search{ background:#1e1b4b; border-color:#3730a3; color:#a5b4fc; }
+  .btn-search:hover{ background:#312e81; color:#fff; border-color:#6366f1; }
+  .shortcut-tag{ font-size:10px; background:rgba(0,0,0,0.3); padding:1px 5px; border-radius:3px; color:#c7d2fe; }
 
-  .btn-erc { display: inline-flex; align-items: center; gap: 6px; }
-  .badge-erc { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
-  .badge-erc-err { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
-  .badge-erc-warn { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
-  .badge-erc-ok { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid #4ade80; }
+  .btn-erc{ display:inline-flex; align-items:center; gap:6px; }
+  .badge-erc{ font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; }
+  .badge-erc-err{ background:rgba(239,68,68,0.2); color:#f87171; border:1px solid #ef4444; }
+  .badge-erc-warn{ background:rgba(245,158,11,0.2); color:#fbbf24; border:1px solid #f59e0b; }
+  .badge-erc-ok{ background:rgba(74,222,128,0.15); color:#4ade80; border:1px solid #4ade80; }
 
-  .routing-tg { gap: 2px; }
-  .mode-btn { font-size: 11px; font-weight: 600; padding: 4px 6px; }
-  .theme-toggle-btn { font-size: 12px; font-weight: 600; }
+  .btn-code{ background:#1e293b; }
+  .btn-secondary-icon{ padding:6px 9px; }
+  .btn-clear:hover{ border-color:#ef4444; color:#ef4444; }
+  .flash{ font-size:12px; color:#4ade80; font-weight:600; animation:fade-in .15s; }
 
-  /* Body */
-  .body{ display:flex; flex:1; overflow:hidden; }
-  .canvas-col{ flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  /* ── Export Dropdown ── */
+  .dropdown-wrap{ position:relative; }
+  .arrow-down{ font-size:9px; opacity:0.8; }
+  .export-dropdown{ position:absolute; right:0; top:calc(100% + 6px);
+    width:250px; background:#0f172a; border:1px solid #334155; border-radius:8px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.6); padding:6px; z-index:100;
+    display:flex; flex-direction:column; gap:2px; animation:pop-down .12s ease-out; }
+  @keyframes pop-down{ from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+  .dd-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
+    color:#64748b; padding:6px 8px 4px; }
+  .dd-item{ display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:6px;
+    border:none; background:transparent; color:#f1f5f9; text-align:left; cursor:pointer;
+    transition:background .1s; }
+  .dd-item:hover{ background:#1e293b; }
+  .dd-icon{ font-size:15px; width:20px; text-align:center; flex-shrink:0; }
+  .dd-info{ display:flex; flex-direction:column; }
+  .dd-label{ font-size:11.5px; font-weight:600; color:#e2e8f0; }
+  .dd-desc{ font-size:10px; color:#94a3b8; }
+  .dd-divider{ height:1px; background:#1e293b; margin:4px 0; }
 
-  /* Toolbar */
-  .toolbar{ height:46px; background:#13132a; border-bottom:2px solid #252545;
-    display:flex; align-items:center; padding:0 8px; gap:2px;
+  /* ── Body ── */
+  .body{ display:flex; flex:1; overflow:hidden; position:relative; }
+  .canvas-col{ flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+
+  /* ── Sidebar Wrappers ── */
+  .sidebar-wrapper{ height:100%; display:flex; flex-direction:column; }
+  .mobile-sidebar-head{ display:none; }
+  .drawer-close-btn{ background:none; border:none; color:#94a3b8; font-size:15px; cursor:pointer; padding:4px 8px; }
+  .drawer-close-btn:hover{ color:#fff; }
+  .drawer-backdrop{ display:none; }
+
+  /* ── Toolbar ── */
+  .toolbar{ height:44px; background:#0f172a; border-bottom:1px solid #1e293b;
+    display:flex; align-items:center; padding:0 8px; gap:4px;
     flex-shrink:0; overflow-x:auto; }
-  .tg{ display:flex; align-items:center; gap:3px; padding:0 7px;
-    border-right:1px solid #252545; flex-shrink:0; }
+  .toolbar::-webkit-scrollbar{ display:none; }
+  .tg{ display:flex; align-items:center; gap:3px; padding:0 6px;
+    border-right:1px solid #1e293b; flex-shrink:0; }
   .tg:last-child{ border-right:none; }
-  .tbtn{ background:transparent; border:1px solid transparent; border-radius:4px;
-    color:#7070a0; padding:5px 7px; cursor:pointer; font-size:13px;
+  .tbtn{ background:transparent; border:1px solid transparent; border-radius:5px;
+    color:#94a3b8; padding:4px 7px; cursor:pointer; font-size:13px;
     min-width:28px; height:28px; display:flex; align-items:center; justify-content:center;
     transition:all .1s; }
-  .tbtn:hover{ background:#22224a; color:#e8e8f5; border-color:#353565; }
-  .tbtn.active{ background:#4f9cf9; color:#fff; border-color:#2176d9; }
+  .tbtn:hover{ background:#1e293b; color:#f8fafc; border-color:#334155; }
+  .tbtn.active{ background:#0284c7; color:#fff; border-color:#38bdf8; }
+
+  .routing-tg{ gap:2px; }
+  .mode-btn{ font-size:11px; font-weight:600; padding:3px 6px; }
+  .theme-toggle-btn{ font-size:12px; }
 
   .wire-colors{ gap:5px; }
-  .col-lbl{ font-size:11px; color:#505070; }
-  .cdot{ width:20px; height:20px; border-radius:50%; border:2px solid transparent;
+  .col-lbl{ font-size:11px; color:#64748b; font-weight:600; }
+  .cdot{ width:18px; height:18px; border-radius:50%; border:2px solid transparent;
     cursor:pointer; transition:transform .1s; flex-shrink:0; }
   .cdot:hover{ transform:scale(1.2); }
-  .cdot.cdot-active{ border-color:#fff; transform:scale(1.2); box-shadow:0 0 5px rgba(255,255,255,.3); }
-  .col-custom{ width:22px; height:22px; border:none; border-radius:50%;
+  .cdot.cdot-active{ border-color:#fff; transform:scale(1.2); box-shadow:0 0 6px rgba(255,255,255,.4); }
+  .col-custom{ width:20px; height:20px; border:none; border-radius:50%;
     cursor:pointer; padding:0; background:none; }
 
-  .shortcuts-hint{ font-size:10px; color:#353555; white-space:nowrap; }
+  .shortcuts-hint{ font-size:10px; color:#475569; white-space:nowrap; }
 
-  /* Right sidebar */
-  .rsb{ width:250px; flex-shrink:0; background:#13132a;
-    border-left:2px solid #252545; display:flex; flex-direction:column; overflow:hidden; }
-  .rsb-head{ padding:10px 12px; border-bottom:1px solid #252545;
-    font:700 10px/1 sans-serif; text-transform:uppercase; letter-spacing:1px; color:#4f9cf9; flex-shrink:0; }
+  /* ── Right sidebar ── */
+  .rsb{ width:260px; flex-shrink:0; background:#0f172a;
+    border-left:1px solid #1e293b; display:flex; flex-direction:column; overflow:hidden; }
+  .rsb-head{ padding:10px 12px; border-bottom:1px solid #1e293b;
+    font:700 11px/1 sans-serif; text-transform:uppercase; letter-spacing:0.8px; color:#38bdf8;
+    display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
 
-  .tpls{ border-top:1px solid #252545; padding:10px; flex-shrink:0; }
-  .tpls-title{ font:700 10px/1 sans-serif; text-transform:uppercase; letter-spacing:1px;
-    color:#4f9cf9; margin-bottom:7px; }
+  .tpls{ border-top:1px solid #1e293b; padding:10px; flex-shrink:0; }
+  .tpls-title{ font:700 10px/1 sans-serif; text-transform:uppercase; letter-spacing:0.8px;
+    color:#94a3b8; margin-bottom:6px; }
   .tpl-btn{ display:flex; align-items:center; gap:8px; width:100%;
-    padding:8px 10px; margin-bottom:4px; background:#1a1a35;
-    border:1px solid #252545; border-radius:4px; color:#9090b8;
-    cursor:pointer; font-size:12px; text-align:left; transition:all .1s; }
-  .tpl-btn:hover{ background:#22224a; border-color:#4f9cf9; color:#e8e8f5; }
+    padding:7px 9px; margin-bottom:4px; background:#1e293b;
+    border:1px solid #334155; border-radius:5px; color:#cbd5e1;
+    cursor:pointer; font-size:11.5px; text-align:left; transition:all .1s; }
+  .tpl-btn:hover{ background:#273549; border-color:#38bdf8; color:#fff; }
 
-  /* ── Overlay shared ── */
+  /* ── Overlays ── */
   .overlay-backdrop {
-    position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:8000;
-    display:flex; align-items:center; justify-content:center;
+    position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:8000;
+    backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center;
   }
   .overlay-box {
-    background:#13132a; border:1px solid #353565; border-radius:10px;
-    padding:20px; min-width:320px; max-width:480px; box-shadow:0 12px 40px rgba(0,0,0,0.8);
+    background:#0f172a; border:1px solid #334155; border-radius:10px;
+    padding:20px; min-width:320px; max-width:480px; box-shadow:0 16px 48px rgba(0,0,0,0.8);
   }
   .ov-head {
-    font:700 14px/1 sans-serif; color:#4f9cf9; margin-bottom:16px;
+    font:700 14px/1 sans-serif; color:#38bdf8; margin-bottom:16px;
     display:flex; align-items:center; justify-content:space-between;
   }
   .ov-close {
-    background:none; border:none; color:#505070; cursor:pointer; font-size:14px;
+    background:none; border:none; color:#64748b; cursor:pointer; font-size:15px;
   }
-  .ov-close:hover { color:#e8e8f5; }
+  .ov-close:hover { color:#f1f5f9; }
   .ov-sub { font:700 10px/1 sans-serif; text-transform:uppercase; letter-spacing:1px;
-    color:#353555; margin:14px 0 8px; }
-  .ov-footer { margin-top:14px; font-size:11px; color:#353555; text-align:center; }
+    color:#64748b; margin:14px 0 8px; }
+  .ov-footer { margin-top:14px; font-size:11px; color:#64748b; text-align:center; }
 
-  /* ── Stats overlay ── */
   .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:4px; }
-  .stat-card { background:#0d0d1a; border:1px solid #252545; border-radius:6px;
+  .stat-card { background:#030712; border:1px solid #1f2937; border-radius:6px;
     padding:12px; text-align:center; }
-  .stat-val { display:block; font:700 24px/1 sans-serif; color:#4f9cf9; margin-bottom:4px; }
+  .stat-val { display:block; font:700 24px/1 sans-serif; color:#38bdf8; margin-bottom:4px; }
   .stat-val.warn { color:#f87171; }
-  .stat-lbl { font-size:10px; color:#505070; text-transform:uppercase; letter-spacing:0.8px; }
+  .stat-lbl { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.8px; }
   .theme-list { display:flex; flex-direction:column; gap:5px; }
   .theme-row { display:flex; align-items:center; gap:8px; font-size:12px; }
   .theme-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-  .theme-name { flex:1; color:#9090b8; text-transform:capitalize; }
-  .theme-count { color:#4f9cf9; font-weight:700; }
+  .theme-name { flex:1; color:#94a3b8; text-transform:capitalize; }
+  .theme-count { color:#38bdf8; font-weight:700; }
 
-  /* ── Shortcut overlay ── */
-  .shortcut-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px;
-    align-items:center; }
-  .sc-key { background:#0d0d1a; border:1px solid #353565; border-radius:4px;
-    padding:3px 8px; font:600 11px 'Consolas',monospace; color:#4f9cf9;
-    white-space:nowrap; }
-  .sc-desc { font-size:12px; color:#9090b8; }
+  .shortcut-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; align-items:center; }
+  .sc-key { background:#030712; border:1px solid #334155; border-radius:4px;
+    padding:3px 8px; font:600 11px 'Consolas',monospace; color:#38bdf8; white-space:nowrap; }
+  .sc-desc { font-size:12px; color:#cbd5e1; }
+
+  /* ── LIGHT MODE OVERRIDES ── */
+  .app.light-app { background: #f8fafc; color: #0f172a; }
+  .app.light-app .hdr { background: #ffffff; border-bottom-color: #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .app.light-app .logo { color: #0284c7; }
+  .app.light-app .badge { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+  .app.light-app .proj-name { color: #0f172a; }
+  .app.light-app .proj-name:hover { background: #f1f5f9; border-color: #cbd5e1; }
+  .app.light-app .proj-name:focus { background: #fff; border-color: #0284c7; }
+  .app.light-app .btn { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
+  .app.light-app .btn:hover { background: #f1f5f9; color: #0f172a; border-color: #94a3b8; }
+  .app.light-app .btn-pri { background: #0284c7; color: #fff; border-color: #0369a1; }
+  .app.light-app .nav-toggle-btn { background: #f8fafc; border-color: #cbd5e1; color: #475569; }
+  .app.light-app .nav-toggle-btn.btn-active { background: #0284c7; color: #fff; }
+  .app.light-app .toolbar { background: #ffffff; border-bottom-color: #e2e8f0; }
+  .app.light-app .tg { border-right-color: #e2e8f0; }
+  .app.light-app .tbtn { color: #64748b; }
+  .app.light-app .tbtn:hover { background: #f1f5f9; color: #0f172a; border-color: #cbd5e1; }
+  .app.light-app .tbtn.active { background: #0284c7; color: #fff; }
+  .app.light-app .rsb { background: #ffffff; border-left-color: #e2e8f0; }
+  .app.light-app .rsb-head { border-bottom-color: #e2e8f0; color: #0284c7; }
+  .app.light-app .tpls { border-top-color: #e2e8f0; }
+  .app.light-app .tpl-btn { background: #f8fafc; border-color: #e2e8f0; color: #334155; }
+  .app.light-app .tpl-btn:hover { background: #f1f5f9; border-color: #0284c7; }
+  .app.light-app .export-dropdown { background: #ffffff; border-color: #cbd5e1; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+  .app.light-app .dd-item:hover { background: #f1f5f9; }
+  .app.light-app .dd-label { color: #0f172a; }
+  .app.light-app .dd-divider { background: #e2e8f0; }
+
+  /* ── RESPONSIVE MEDIA QUERIES ── */
+  @media (max-width: 1023px) {
+    .drawer-backdrop {
+      display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(2px); z-index: 90;
+    }
+    .sidebar-wrapper.left-wrap {
+      position: fixed; left: 0; top: 52px; bottom: 0; z-index: 95;
+      width: 250px; background: #0f172a; box-shadow: 4px 0 24px rgba(0,0,0,0.7);
+      animation: slide-right .18s ease-out;
+    }
+    .sidebar-wrapper.right-wrap {
+      position: fixed; right: 0; top: 52px; bottom: 0; z-index: 95;
+      width: 280px; background: #0f172a; box-shadow: -4px 0 24px rgba(0,0,0,0.7);
+      animation: slide-left .18s ease-out;
+    }
+    .mobile-sidebar-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; border-bottom: 1px solid #1e293b;
+      font-weight: 700; font-size: 12px; color: #38bdf8; background: #0b0f19;
+    }
+    @keyframes slide-right { from{transform:translateX(-100%)} to{transform:translateX(0)} }
+    @keyframes slide-left { from{transform:translateX(100%)} to{transform:translateX(0)} }
+  }
+
+  @media (max-width: 768px) {
+    .hdr { padding: 0 8px; gap: 6px; }
+    .proj-name { max-width: 140px; font-size: 13px; }
+    .nav-toggle-lbl, .btn-text { display: none; }
+    .shortcuts-hint { display: none; }
+    .badge { display: none; }
+  }
+
+  @media (max-width: 480px) {
+    .logo-text { display: none; }
+    .btn-search { padding: 6px 7px; }
+    .shortcut-tag { display: none; }
+  }
 </style>

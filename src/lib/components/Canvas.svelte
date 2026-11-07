@@ -674,6 +674,58 @@
       containerEl.removeEventListener('drop',        onDrop)
     }
   })
+  // ── Touch Gestures (Mobile/Tablet Pan & Pinch-Zoom) ─────────
+  let touchPanStart = null
+  let touchStartDist = 0
+  let touchStartScale = 1
+  let touchStartCenter = { x: 0, y: 0 }
+
+  function onTouchStart(e) {
+    if (e.touches.length === 1) {
+      const t = e.touches[0]
+      touchPanStart = { x: t.clientX - vx, y: t.clientY - vy }
+    } else if (e.touches.length === 2) {
+      touchPanStart = null
+      const t1 = e.touches[0], t2 = e.touches[1]
+      touchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      touchStartScale = vscale
+      const rect = containerEl?.getBoundingClientRect() ?? { left: 0, top: 0 }
+      touchStartCenter = {
+        x: (t1.clientX + t2.clientX) / 2 - rect.left,
+        y: (t1.clientY + t2.clientY) / 2 - rect.top
+      }
+    }
+  }
+
+  function onTouchMove(e) {
+    if (e.touches.length === 1 && touchPanStart) {
+      const t = e.touches[0]
+      const nx = t.clientX - touchPanStart.x
+      const ny = t.clientY - touchPanStart.y
+      if (isFinite(nx) && isFinite(ny)) {
+        vx = nx; vy = ny
+      }
+    } else if (e.touches.length === 2 && touchStartDist > 0) {
+      e.preventDefault()
+      const t1 = e.touches[0], t2 = e.touches[1]
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      const factor = dist / touchStartDist
+      const ns = Math.min(4, Math.max(0.12, touchStartScale * factor))
+      if (isFinite(ns) && ns > 0) {
+        setViewport(
+          touchStartCenter.x - (touchStartCenter.x - vx) * (ns / vscale),
+          touchStartCenter.y - (touchStartCenter.y - vy) * (ns / vscale),
+          ns
+        )
+      }
+    }
+  }
+
+  function onTouchEnd() {
+    touchPanStart = null
+    touchStartDist = 0
+  }
+
   // ── Safe viewport values for SVG (guard against NaN) ─────────
   $: svgVx     = isFinite(vx)     ? vx     : 0
   $: svgVy     = isFinite(vy)     ? vy     : 0
@@ -689,6 +741,9 @@
   bind:this={containerEl}
   role="application"
   aria-label="Wiring diagram canvas"
+  on:touchstart={onTouchStart}
+  on:touchmove={onTouchMove}
+  on:touchend={onTouchEnd}
 >
   <svg
     bind:this={svgEl}
