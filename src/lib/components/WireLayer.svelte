@@ -6,15 +6,27 @@
    *  - Label collision detection: stagger overlapping labels vertically
    *  - Junction dots at T-intersections
    *  - Full data-wire-id for context menu & selection hit-testing
+   *  - Draggable wire waypoints / bend handles when selected
+   *  - Visual Voltage Probe / Animated Power Flow simulation
    */
   import { pinPos, routeWire, routePreview, pathMidpoint, labelPos } from '$lib/engine/geometry.js'
-  import { wires, components as componentsStore, selection, activeTool, removeWire, routingMode } from '$lib/store/diagram.js'
+  import {
+    wires,
+    components as componentsStore,
+    selection,
+    activeTool,
+    removeWire,
+    updateWire,
+    routingMode,
+    showPowerFlow
+  } from '$lib/store/diagram.js'
 
   export let components = null
   export let previewData        = null
   export let wireColor          = '#ef4444'
   export let snapTargetPin      = null
   export let highlightedWireIds = new Set()
+  export let scale              = 1
 
   $: currentComponents = components || $componentsStore
 
@@ -30,7 +42,7 @@
       const p1 = pinPos(fc)(w.fromPin)
       const p2 = pinPos(tc)(w.toPin)
       if (!p1 || !p2) return null
-      const { d, pts } = routeWire(p1, p2, i, w.routingMode || rm)
+      const { d, pts } = routeWire(p1, p2, i, w.routingMode || rm, w.userOffset || 0)
       const mid  = pathMidpoint(pts)
       const lpos = labelPos(pts)
       return { d, pts, p1, p2, mid, lpos, wire: w }
@@ -80,6 +92,31 @@
     e.stopPropagation()
   }
 
+  function startWaypointDrag(wire, e) {
+    e.stopPropagation()
+    e.preventDefault()
+    const startX = e.clientX
+    const startY = e.clientY
+    const initOffset = wire.userOffset || 0
+    const currentScale = scale > 0 ? scale : 1
+
+    function onMove(me) {
+      const dx = (me.clientX - startX) / currentScale
+      const dy = (me.clientY - startY) / currentScale
+      const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy
+      const newOffset = Math.round((initOffset + delta) / 10) * 10
+      updateWire(wire.id, { userOffset: newOffset })
+    }
+
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   $: snapComp  = snapTargetPin?.comp
   $: snapPinId = snapTargetPin?.pinId
 </script>
@@ -102,10 +139,12 @@
 {/if}
 
 <!-- Wires -->
-{#each normalWires as { d, p1, p2, wire } (wire.id)}
+{#each normalWires as { d, p1, p2, mid, wire } (wire.id)}
   {@const sel = $selection?.id === wire.id && $selection?.type === 'wire'}
   {@const highlighted = highlightedWireIds.has(wire.id)}
   {@const col = wire.color ?? '#4f9cf9'}
+  {@const isPowerNet = col === '#ef4444' || col === '#dc2626' || col === '#f59e0b' || col === '#64748b' || wire.label === 'GND' || wire.label?.includes('V')}
+  {@const isFlowing = $showPowerFlow && (isPowerNet || highlighted)}
   <!-- svelte-ignore a11y-interactive-supports-focus -->
   <g class="wire-grp" data-wire-id={wire.id} role="button" tabindex="0"
     aria-label="wire {wire.label || wire.id}"
@@ -117,11 +156,27 @@
     <path {d} stroke="transparent" stroke-width="16" fill="none"/>
     <!-- Wire -->
     <path {d} stroke={col} stroke-width={sel ? 4 : highlighted ? 3.5 : 2.5} fill="none"
+      class:flow-active={isFlowing}
       opacity={highlighted ? 1 : sel ? 1 : 0.85}
       filter={sel ? `drop-shadow(0 0 6px ${col})` : highlighted ? `drop-shadow(0 0 5px ${col})` : undefined}/>
     <!-- Endpoints -->
     <circle cx={p1.x} cy={p1.y} r="4" fill={col} pointer-events="none"/>
     <circle cx={p2.x} cy={p2.y} r="4" fill={col} pointer-events="none"/>
+
+    <!-- Waypoint drag handle when selected -->
+    {#if sel && mid}
+      <!-- svelte-ignore a11y-interactive-supports-focus -->
+      <circle
+        cx={mid.x}
+        cy={mid.y}
+        r="6.5"
+        class="waypoint-handle"
+        role="button"
+        tabindex="0"
+        title="Geser tekukan kabel (drag waypoint)"
+        on:mousedown={(e) => startWaypointDrag(wire, e)}
+      />
+    {/if}
   </g>
 {/each}
 
@@ -145,4 +200,28 @@
 <style>
   .wire-grp { cursor:pointer; }
   .wire-grp:hover path:nth-child(2) { stroke-width:4.5; }
+
+  :global(.flow-active) {
+    stroke-dasharray: 8, 5;
+    animation: wire-flow 0.85s linear infinite;
+  }
+  @keyframes wire-flow {
+    from { stroke-dashoffset: 26; }
+    to { stroke-dashoffset: 0; }
+  }
+
+  .waypoint-handle {
+    fill: #38bdf8;
+    stroke: #ffffff;
+    stroke-width: 2;
+    cursor: grab;
+    transition: transform 0.15s ease;
+  }
+  .waypoint-handle:hover {
+    r: 8.5;
+    fill: #0ea5e9;
+  }
+  .waypoint-handle:active {
+    cursor: grabbing;
+  }
 </style>

@@ -1,5 +1,5 @@
 <script>
-  /** Feature 8: Right-click context menu */
+  /** Feature 8: Right-click context menu with EasyEDA actions */
   import { createEventDispatcher } from 'svelte'
 
   export let x    = 0
@@ -27,6 +27,9 @@
   >
     {#if type === 'component'}
       <button class="item" on:click={() => act('rotate')}     role="menuitem">🔄  Rotate 90° <kbd>R</kbd></button>
+      <button class="item" on:click={() => act('flipX')}      role="menuitem">↔  Flip Horizontal <kbd>X</kbd></button>
+      <button class="item" on:click={() => act('flipY')}      role="menuitem">↕  Flip Vertical <kbd>Y</kbd></button>
+      <div class="divider"></div>
       <button class="item" on:click={() => act('rename')}     role="menuitem">✏️  Rename</button>
       <button class="item" on:click={() => act('duplicate')}  role="menuitem">📋  Duplicate <kbd>Ctrl+D</kbd></button>
       <div class="divider"></div>
@@ -41,6 +44,9 @@
       <button class="item danger" on:click={() => act('delete')} role="menuitem">🗑  Delete <kbd>Del</kbd></button>
 
     {:else}
+      <button class="item" on:click={() => act('placeGnd')}   role="menuitem">⏚  Place GND Flag</button>
+      <button class="item" on:click={() => act('placeVcc')}   role="menuitem">⚡  Place +5V VCC Flag</button>
+      <div class="divider"></div>
       <button class="item" on:click={() => act('addLabel')}   role="menuitem">📝  Add Label <kbd>L</kbd></button>
       <button class="item" on:click={() => act('clearSel')}   role="menuitem">🧹  Clear Selection <kbd>Esc</kbd></button>
       <div class="divider"></div>
@@ -55,7 +61,7 @@
     position: fixed; z-index: 9000;
     background: #1a1a35; border: 1px solid #353565;
     border-radius: 8px; padding: 4px;
-    min-width: 195px;
+    min-width: 205px;
     box-shadow: 0 8px 28px rgba(0,0,0,0.75);
     font-size: 12px;
   }
@@ -73,5 +79,32 @@
     margin-left: auto; font-size: 10px; color: #505070;
     background: #0d0d1a; border: 1px solid #353555;
     border-radius: 3px; padding: 1px 5px;
+  }
+
+  :global(.light-app) .menu {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  }
+  :global(.light-app) .item {
+    color: #334155;
+  }
+  :global(.light-app) .item:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  :global(.light-app) .item.danger {
+    color: #dc2626;
+  }
+  :global(.light-app) .item.danger:hover {
+    background: #fee2e2;
+  }
+  :global(.light-app) .divider {
+    background: #e2e8f0;
+  }
+  :global(.light-app) kbd {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #64748b;
   }
 </style>

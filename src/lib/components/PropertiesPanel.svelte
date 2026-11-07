@@ -8,7 +8,8 @@
   import { selection, multiSelection, components, wires, labels, routingMode,
            updateComponent, updateWire, updateLabel,
            removeComponent, removeComponents, removeWire, removeLabel,
-           duplicateComponent, duplicateComponents, rotateComponent, rotateComponents, pushHistory } from '$lib/store/diagram.js'
+           duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
+           flipComponents, alignComponents, distributeComponents, pushHistory } from '$lib/store/diagram.js'
   import { PIN_COLORS } from '$lib/data/pin-colors.js'
   import { MCU_PINS }   from '$lib/data/mcu-pins.js'
 
@@ -73,6 +74,24 @@
         removeComponents(multiItems.map(c => c.instanceId))
       }}>🗑 Delete All</button>
     </div>
+
+    <div class="section-title" style="margin-top:10px">Alignment</div>
+    <div class="align-grid">
+      <button class="btn-act" on:click={() => alignComponents(multiItems.map(c => c.instanceId), 'left')} title="Align Left">⬅ Left</button>
+      <button class="btn-act" on:click={() => alignComponents(multiItems.map(c => c.instanceId), 'centerH')} title="Center Horizontal">↔ Center H</button>
+      <button class="btn-act" on:click={() => alignComponents(multiItems.map(c => c.instanceId), 'right')} title="Align Right">➡ Right</button>
+      <button class="btn-act" on:click={() => alignComponents(multiItems.map(c => c.instanceId), 'top')} title="Align Top">⬆ Top</button>
+      <button class="btn-act" on:click={() => alignComponents(multiItems.map(c => c.instanceId), 'centerV')} title="Center Vertical">↕ Center V</button>
+      <button class="btn-act" on:click={() => alignComponents(multiItems.map(c => c.instanceId), 'bottom')} title="Align Bottom">⬇ Bottom</button>
+    </div>
+
+    {#if multiItems.length >= 3}
+      <div class="section-title" style="margin-top:8px">Distribution</div>
+      <div class="dist-row">
+        <button class="btn-act" style="flex:1" on:click={() => distributeComponents(multiItems.map(c => c.instanceId), 'h')} title="Distribute Horizontally">↔ Distribute H</button>
+        <button class="btn-act" style="flex:1" on:click={() => distributeComponents(multiItems.map(c => c.instanceId), 'v')} title="Distribute Vertically">↕ Distribute V</button>
+      </div>
+    {/if}
 
     <!-- ── EMPTY STATE + LEGEND ───────────────────────────── -->
   {:else if !item}
@@ -185,6 +204,15 @@
       </button>
     </div>
 
+    <div class="action-row" style="margin-top:6px">
+      <button class="btn-act" style="flex:1" on:click={() => flipComponents([item.instanceId], 'x')} title="Flip Horizontal (X)">
+        ↔ Flip X
+      </button>
+      <button class="btn-act" style="flex:1" on:click={() => flipComponents([item.instanceId], 'y')} title="Flip Vertical (Y)">
+        ↕ Flip Y
+      </button>
+    </div>
+
     <!-- ── WIRE PROPERTIES ─────────────────────────────────── -->
   {:else if $selection.type === 'wire' && item}
     <div class="section-title">Wire</div>
@@ -226,18 +254,27 @@
     </div>
 
     <div class="section-title" style="margin-top:10px">Connection</div>
+    {@const fc = $components.find(c => c.instanceId === item.fromComp)}
+    {@const tc = $components.find(c => c.instanceId === item.toComp)}
     <div class="conn-info">
       <div class="conn-row">
         <span class="conn-lbl">From</span>
-        <span class="conn-val">{item.fromComp}</span>
+        <span class="conn-val">{fc?.label || item.fromComp}</span>
         <span class="conn-pin">→ {item.fromPin}</span>
       </div>
       <div class="conn-row">
         <span class="conn-lbl">To</span>
-        <span class="conn-val">{item.toComp}</span>
+        <span class="conn-val">{tc?.label || item.toComp}</span>
         <span class="conn-pin">→ {item.toPin}</span>
       </div>
     </div>
+
+    {#if item.userOffset}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:4px 6px;background:#1e293b;border-radius:4px">
+        <span style="font-size:11px;color:#94a3b8">Offset: {item.userOffset}px</span>
+        <button class="btn-act" style="padding:2px 8px;font-size:11px" on:click={() => updateWire(item.id, { userOffset: 0 })}>Reset Offset</button>
+      </div>
+    {/if}
 
     <button class="btn-act danger" style="width:100%;margin-top:10px"
       on:click={() => removeWire(item.id)}>
@@ -328,6 +365,9 @@
   .btn-act:hover { background: #334155; color: #fff; border-color: #38bdf8; }
   .btn-act.danger { color: #f87171; border-color: #7f1d1d; background: #270e0e; }
   .btn-act.danger:hover { background: #451010; border-color: #ef4444; }
+
+  .align-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+  .dist-row { display: flex; gap: 4px; margin-bottom: 6px; }
 
   .multi-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
   .multi-row { display: flex; align-items: center; gap: 7px; font-size: 11px;

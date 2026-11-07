@@ -16,8 +16,9 @@
     components, wires, labels, selection, multiSelection, activeTool,
     addComponent, addWire, addLabel, removeLabel, removeWire, removeComponent,
     updateLabel, updateComponent, updateWire, duplicateComponent, pushHistory,
-    rotateComponent, rotateComponents,
+    rotateComponent, rotateComponents, flipComponents,
     edaGridType, showDrawingSheet, highlightedWireIds as highlightedWireIdsStore,
+    sheetConfig, updateSheetConfig,
     getConnectedWireIds, getUsedPins
   } from '$lib/store/diagram.js'
 
@@ -459,6 +460,18 @@
     if (action === 'rotate' && t?.instanceId) {
       rotateComponent(t.instanceId, 90)
     }
+    if (action === 'flipX' && t?.instanceId) {
+      flipComponents([t.instanceId], 'x')
+    }
+    if (action === 'flipY' && t?.instanceId) {
+      flipComponents([t.instanceId], 'y')
+    }
+    if (action === 'placeGnd') {
+      quickPlaceComponent('gnd-flag')
+    }
+    if (action === 'placeVcc') {
+      quickPlaceComponent('vcc-flag')
+    }
     if (action === 'delete') {
       if (t?.instanceId) removeComponent(t.instanceId)
       else if (t?.id)    removeWire(t.id)
@@ -671,6 +684,27 @@
     e.preventDefault()
     const id = e.dataTransfer.getData('comp-id')
     if (id) handleDrop(id, e.clientX, e.clientY)
+  }
+
+  // ── Sheet Dimensions & Title Block ───────────────────
+  $: sheetW = $sheetConfig?.size === 'A4' ? 2000 : 2400
+  $: sheetH = $sheetConfig?.size === 'A4' ? 1350 : 1500
+  $: innerW = sheetW - 40
+  $: innerH = sheetH - 40
+  $: tbX    = sheetW - 460
+  $: tbY    = sheetH - 200
+
+  async function editSheetTitle() {
+    const cur = $sheetConfig?.title || projectName || 'Schematic Design'
+    const newTitle = await showPrompt({
+      title: 'Edit Judul Skematik',
+      message: 'Masukkan judul skematik untuk Title Block:',
+      defaultValue: cur,
+      placeholder: 'Judul Skematik...'
+    })
+    if (newTitle !== null && newTitle.trim()) {
+      updateSheetConfig({ title: newTitle.trim() })
+    }
   }
 
   // ── Status ────────────────────────────────────────────
@@ -887,59 +921,61 @@
     <g transform="translate({svgVx},{svgVy}) scale({svgVscale})">
       <!-- EasyEDA Schematic Drawing Sheet Frame with Zone Margins and Title Block -->
       {#if $showDrawingSheet}
-        <g class="cad-sheet-frame" pointer-events="none">
+        <g class="cad-sheet-frame">
           <!-- Outer border -->
-          <rect x="-40" y="-40" width="2400" height="1500" fill="none"
+          <rect x="-40" y="-40" width={sheetW} height={sheetH} fill="none" pointer-events="none"
             stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="2" opacity="0.8"/>
           <!-- Inner border with zone margin -->
-          <rect x="-20" y="-20" width="2360" height="1460" fill="none"
+          <rect x="-20" y="-20" width={innerW} height={innerH} fill="none" pointer-events="none"
             stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1" opacity="0.6"/>
           
           <!-- Zone markers top & bottom (1 to 8) -->
           {#each ['1','2','3','4','5','6','7','8'] as num, i}
-            {@const zx = -20 + (i + 0.5) * (2360 / 8)}
-            <text x={zx} y="-27" fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle">{num}</text>
-            <text x={zx} y="1454" fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle">{num}</text>
+            {@const zx = -20 + (i + 0.5) * (innerW / 8)}
+            <text x={zx} y="-27" fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" pointer-events="none">{num}</text>
+            <text x={zx} y={innerH - 6} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" pointer-events="none">{num}</text>
           {/each}
           <!-- Zone markers left & right (A to F) -->
           {#each ['A','B','C','D','E','F'] as char, i}
-            {@const zy = -20 + (i + 0.5) * (1460 / 6)}
-            <text x="-31" y={zy} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle">{char}</text>
-            <text x="2350" y={zy} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle">{char}</text>
+            {@const zy = -20 + (i + 0.5) * (innerH / 6)}
+            <text x="-31" y={zy} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" pointer-events="none">{char}</text>
+            <text x={innerW - 10} y={zy} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" pointer-events="none">{char}</text>
           {/each}
 
           <!-- Professional Title Block at bottom-right corner -->
-          <g transform="translate(1940, 1300)">
-            <rect width="400" height="140" fill={isLightMode ? "#ffffff" : "#0f172a"}
+          <!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
+          <g transform="translate({tbX}, {tbY})" pointer-events="all" style="cursor: pointer;"
+            role="button" tabindex="0" on:click={editSheetTitle} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && editSheetTitle()} title="Klik untuk edit Title Block skematik">
+            <rect width="420" height="150" fill={isLightMode ? "#ffffff" : "#0f172a"}
               stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1.8"/>
-            <line x1="0" y1="36" x2="400" y2="36" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
-            <line x1="0" y1="78" x2="400" y2="78" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
-            <line x1="220" y1="36" x2="220" y2="140" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
-            <line x1="310" y1="78" x2="310" y2="140" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="0" y1="36" x2="420" y2="36" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="0" y1="84" x2="420" y2="84" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="230" y1="36" x2="230" y2="150" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="330" y1="84" x2="330" y2="150" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
 
-            <text x="14" y="24" font-size="14" font-weight="800" fill={isLightMode ? "#1e293b" : "#f8fafc"}>EASYEDA SCHEMATIC</text>
-            <text x="386" y="24" text-anchor="end" font-size="11" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>WireTool v2.2</text>
+            <text x="14" y="24" font-size="14" font-weight="800" fill={isLightMode ? "#1e293b" : "#f8fafc"}>{$sheetConfig.company || 'EASYEDA SCHEMATIC'}</text>
+            <text x="406" y="24" text-anchor="end" font-size="11" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>WireTool v2.2 [{$sheetConfig.size}]</text>
 
-            <text x="14" y="52" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>TITLE:</text>
-            <text x="14" y="68" font-size="13" font-weight="700" fill={isLightMode ? "#0f172a" : "#38bdf8"}>{projectName || 'Schematic Design'}</text>
+            <text x="14" y="52" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>TITLE (KLIK UNTUK EDIT):</text>
+            <text x="14" y="70" font-size="13" font-weight="700" fill={isLightMode ? "#0f172a" : "#38bdf8"}>{$sheetConfig.title || projectName || 'Schematic Design'}</text>
 
-            <text x="230" y="52" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>DESIGNER:</text>
-            <text x="230" y="68" font-size="12" font-weight="600" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>Electronics Eng</text>
+            <text x="240" y="52" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>DESIGNER:</text>
+            <text x="240" y="70" font-size="12" font-weight="600" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>{$sheetConfig.engineer || 'Electronics Eng'}</text>
 
-            <text x="14" y="96" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>DATE:</text>
-            <text x="14" y="118" font-size="11" font-weight="600" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>{new Date().toISOString().slice(0, 10)}</text>
+            <text x="14" y="104" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>DATE:</text>
+            <text x="14" y="126" font-size="11" font-weight="600" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>{$sheetConfig.date || new Date().toISOString().slice(0, 10)}</text>
 
-            <text x="230" y="96" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>REV:</text>
-            <text x="230" y="118" font-size="12" font-weight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>1.0</text>
+            <text x="240" y="104" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>REV:</text>
+            <text x="240" y="126" font-size="12" font-weight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>{$sheetConfig.rev || '1.0'}</text>
 
-            <text x="320" y="96" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>SHEET:</text>
-            <text x="320" y="118" font-size="12" font-weight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>1 / 1</text>
+            <text x="340" y="104" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>SHEET:</text>
+            <text x="340" y="126" font-size="12" font-weight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>{$sheetConfig.sheet || '1 / 1'}</text>
           </g>
         </g>
       {/if}
 
-      <!-- Wires layer with active net highlight -->
-      <WireLayer components={$components} {previewData} {wireColor} snapTargetPin={snapTarget} highlightedWireIds={effectiveHighlightedWires}/>
+      <!-- Wires layer with active net highlight and scale -->
+      <WireLayer components={$components} {previewData} {wireColor} snapTargetPin={snapTarget} highlightedWireIds={effectiveHighlightedWires} scale={svgVscale}/>
 
       <!-- Labels -->
       {#each $labels as lbl (lbl.id)}

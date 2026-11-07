@@ -175,7 +175,7 @@ function hashStr(s) {
 /**
  * Wire routing supporting Orthogonal (Manhattan), Curved (Bezier), and Direct.
  */
-export function routeWire(p1, p2, wireIndex = 0, mode = "orthogonal") {
+export function routeWire(p1, p2, wireIndex = 0, mode = "orthogonal", userOffset = 0) {
   if (mode === "direct") {
     const pts = [p1, p2];
     return { d: `M ${r(p1.x)} ${r(p1.y)} L ${r(p2.x)} ${r(p2.y)}`, pts };
@@ -220,11 +220,12 @@ export function routeWire(p1, p2, wireIndex = 0, mode = "orthogonal") {
     };
   }
 
-  // Orthogonal wire routing with lane fan-out
+  // Orthogonal wire routing with lane fan-out and manual user offset adjustment
   const key = `${Math.round(p1.x)},${Math.round(p1.y)},${Math.round(p2.x)},${Math.round(p2.y)}`;
   const hashOff = (hashStr(key) % 4) * 12; // 0, 12, 24, 36 px bands
   const sign = wireIndex % 2 === 0 ? 1 : -1;
   const lane = sign * (Math.floor(wireIndex / 2) * 20 + hashOff);
+  const totalOffset = (isFinite(userOffset) ? userOffset : 0) + lane;
 
   const h1 = p1.side === "left" || p1.side === "right";
   const h2 = p2.side === "left" || p2.side === "right";
@@ -232,18 +233,18 @@ export function routeWire(p1, p2, wireIndex = 0, mode = "orthogonal") {
 
   if (h1 && h2) {
     // Both horizontal exits — meet at a shared Y lane
-    const my = (s1.y + s2.y) / 2 + lane;
+    const my = (s1.y + s2.y) / 2 + totalOffset;
     pts.push({ x: s1.x, y: my }, { x: s2.x, y: my });
   } else if (!h1 && !h2) {
     // Both vertical exits — meet at a shared X lane
-    const mx = (s1.x + s2.x) / 2 + lane;
+    const mx = (s1.x + s2.x) / 2 + totalOffset;
     pts.push({ x: mx, y: s1.y }, { x: mx, y: s2.y });
   } else if (h1) {
     // p1 horizontal, p2 vertical — L-bend
-    pts.push({ x: s1.x, y: s2.y });
+    pts.push({ x: s1.x + (userOffset || 0), y: s2.y });
   } else {
     // p1 vertical, p2 horizontal — L-bend
-    pts.push({ x: s2.x, y: s1.y });
+    pts.push({ x: s2.x, y: s1.y + (userOffset || 0) });
   }
   pts.push(s2, p2);
   return { d: toPath(pts), pts };

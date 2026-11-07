@@ -17,7 +17,7 @@
     components as compsStore, wires as wiresStore,
     duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
     flipComponentX, flipComponentY, flipComponents,
-    edaGridType, showDrawingSheet,
+    edaGridType, showDrawingSheet, showPowerFlow, sheetConfig, updateSheetConfig,
     removeComponent, removeComponents,
     removeWire, removeLabel,
     getAutoSave, clearAutoSave, initAutoSave
@@ -266,6 +266,31 @@
     flash(`BOM exported (${bom.length} types) ✓`)
   }
 
+  // Feature: Shareable URL via Hash
+  async function shareDiagramLink() {
+    try {
+      const data = {
+        project: projectName,
+        components: $compsStore,
+        wires: $wiresStore,
+        sheetConfig: $sheetConfig
+      }
+      const jsonStr = JSON.stringify(data)
+      const b64 = btoa(unescape(encodeURIComponent(jsonStr)))
+      const url = new URL(window.location.href)
+      url.hash = `data=${b64}`
+      await navigator.clipboard.writeText(url.toString())
+      flash('Tautan diagram berhasil disalin ke clipboard! 🔗')
+    } catch (err) {
+      flash('Gagal menyalin tautan diagram', '#f87171')
+    }
+  }
+
+  // Feature: Print-to-PDF / Vector Print Export
+  function printDiagram() {
+    window.print()
+  }
+
   function dl(content, name, mime, isHref=false) {
     const a = document.createElement('a')
     a.download = name
@@ -480,6 +505,27 @@
       if (savedTheme === 'light') isLightMode = true
     } catch {}
 
+    // Check shared URL hash
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#data=')) {
+      try {
+        const b64 = window.location.hash.slice(6)
+        const jsonStr = decodeURIComponent(escape(atob(b64)))
+        const parsed = JSON.parse(jsonStr)
+        if (parsed.components && parsed.wires) {
+          if (parsed.project) projectName = parsed.project
+          loadDiagram(parsed)
+          if (parsed.sheetConfig) updateSheetConfig(parsed.sheetConfig)
+          clearAutoSave()
+          initAutoSave()
+          setTimeout(() => canvasRef.fitView?.(), 150)
+          flash('Diagram berhasil dimuat dari link bersama 🔗')
+          return
+        }
+      } catch (err) {
+        console.error('Failed to parse share link:', err)
+      }
+    }
+
     const saved = getAutoSave()
     if (saved && saved.components?.length) {
       const ok = await showConfirm({
@@ -562,6 +608,12 @@
               </button>
               <button class="rdd-item" on:click={() => { exportJSON(); activeRibbon = null }}>
                 <span class="rdd-icon">💾</span> Save JSON Diagram
+              </button>
+              <button class="rdd-item" on:click={() => { shareDiagramLink(); activeRibbon = null }}>
+                <span class="rdd-icon">🔗</span> Share Link (Tautan Proyek)
+              </button>
+              <button class="rdd-item" on:click={() => { printDiagram(); activeRibbon = null }}>
+                <span class="rdd-icon">🖨</span> Print / PDF Export
               </button>
               <div class="rdd-divider"></div>
               <button class="rdd-item" on:click={() => { exportPNG(); activeRibbon = null }}>
@@ -676,6 +728,12 @@
               </button>
               <button class="rdd-item" on:click={() => { canvasRef.toggleSheet?.(); activeRibbon = null }}>
                 <span class="rdd-icon">📄</span> Drawing Sheet Frame: <strong>{$showDrawingSheet ? 'ON' : 'OFF'}</strong>
+              </button>
+              <button class="rdd-item" on:click={() => { showPowerFlow.update(v => !v); activeRibbon = null }}>
+                <span class="rdd-icon">⚡</span> Animated Power Flow: <strong>{$showPowerFlow ? 'ON' : 'OFF'}</strong>
+              </button>
+              <button class="rdd-item" on:click={() => { updateSheetConfig({ size: $sheetConfig.size === 'A4' ? 'A3' : 'A4' }); activeRibbon = null }}>
+                <span class="rdd-icon">📐</span> Sheet Size: <strong>{$sheetConfig.size}</strong> (A4/A3)
               </button>
               <button class="rdd-item" on:click={() => { canvasRef.toggleMinimap?.(); activeRibbon = null }}>
                 <span class="rdd-icon">🗺</span> Minimap <span class="rdd-key">M</span>
@@ -806,6 +864,20 @@
               <div class="dd-info">
                 <span class="dd-label">Diagram JSON (.json)</span>
                 <span class="dd-desc">Simpan untuk diedit kembali nanti</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { printDiagram(); showExportMenu = false }}>
+              <span class="dd-icon">🖨</span>
+              <div class="dd-info">
+                <span class="dd-label">Cetak / Print to PDF</span>
+                <span class="dd-desc">Cetak layout skematik lanskap A4/A3</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { shareDiagramLink(); showExportMenu = false }}>
+              <span class="dd-icon">🔗</span>
+              <div class="dd-info">
+                <span class="dd-label">Bagikan Tautan Link Proyek</span>
+                <span class="dd-desc">Salin URL instan untuk dibuka siapa saja</span>
               </div>
             </button>
             <button class="dd-item" on:click={() => { showWokwiModal = true; showExportMenu = false }}>
@@ -948,6 +1020,12 @@
           </button>
           <button class="tbtn" class:active={$showDrawingSheet} on:click={() => canvasRef.toggleSheet?.()} title="Tampilkan/Sembunyikan Bingkai Drawing Sheet CAD">
             <span>📄</span> <span class="tbtn-txt">Sheet</span>
+          </button>
+          <button class="tbtn probe-btn" class:probe-active={$showPowerFlow} on:click={() => showPowerFlow.update(v => !v)} title="Simulasi Aliran Arus / Voltage Probe">
+            <span>⚡</span> <span class="tbtn-txt">Probe</span>
+          </button>
+          <button class="tbtn" on:click={shareDiagramLink} title="Salin Tautan Proyek (Share Link) 🔗">
+            <span>🔗</span> <span class="tbtn-txt">Share</span>
           </button>
           <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Tampilkan/Sembunyikan Minimap (M)">🗺</button>
           <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema (Light / Dark)">
@@ -1387,5 +1465,44 @@
     .logo-text { display: none; }
     .btn-search { padding: 6px 7px; }
     .shortcut-tag { display: none; }
+  }
+
+  .probe-btn.probe-active {
+    background: rgba(34, 197, 94, 0.25) !important;
+    color: #4ade80 !important;
+    border-color: #22c55e !important;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+  }
+
+  /* ── PRINT & PDF EXPORT STYLES ── */
+  @media print {
+    :global(body), .app {
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+    .cad-header,
+    .cad-action-strip,
+    .sidebar-wrapper,
+    .drawer-backdrop,
+    .flash,
+    :global(.minimap-container),
+    :global(.dialog-backdrop) {
+      display: none !important;
+    }
+    .canvas-col,
+    :global(.canvas-wrap) {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: #ffffff !important;
+    }
+    :global(#grid-bg) {
+      display: none !important;
+    }
+    @page {
+      size: landscape;
+      margin: 0;
+    }
   }
 </style>

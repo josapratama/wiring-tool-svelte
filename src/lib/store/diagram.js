@@ -27,8 +27,23 @@ export const activeTool = writable("select");
 export const routingMode = writable("orthogonal"); // 'orthogonal' | 'curved' | 'direct'
 export const edaGridType = writable("dots"); // 'dots' | 'lines' | 'off'
 export const showDrawingSheet = writable(true);
+export const showPowerFlow = writable(false);
 export const highlightedWireIds = writable(new Set());
 export const activeHighlightedNet = writable(null);
+
+export const sheetConfig = writable({
+  title: "ESP32-S3 FI Diagnostic",
+  engineer: "Electronics Eng",
+  company: "EasyEDA CAD",
+  date: new Date().toISOString().slice(0, 10),
+  rev: "1.0",
+  sheet: "1 / 1",
+  size: "A3", // 'A4' | 'A3'
+});
+
+export function updateSheetConfig(patch) {
+  sheetConfig.update((cfg) => ({ ...cfg, ...patch }));
+}
 
 // ── History ───────────────────────────────────────────────
 const undoStack = [];
@@ -198,6 +213,89 @@ export function flipComponents(ids, axis = "x") {
       return c;
     }),
   );
+}
+
+// ── Feature: Alignment & Distribution Tools ─────────────────
+export function alignComponents(ids, mode = "left") {
+  if (!ids || ids.length < 2) return;
+  pushHistory();
+  const set = new Set(ids);
+  const cs = get(components);
+  const targets = cs.filter((c) => set.has(c.instanceId));
+  if (targets.length < 2) return;
+
+  const GRID = 20;
+  const snapVal = (v) => Math.round(v / GRID) * GRID;
+
+  let refX = 0;
+  let refY = 0;
+
+  if (mode === "left") {
+    refX = Math.min(...targets.map((c) => c.x));
+  } else if (mode === "right") {
+    refX = Math.max(...targets.map((c) => c.x + c.width));
+  } else if (mode === "top") {
+    refY = Math.min(...targets.map((c) => c.y));
+  } else if (mode === "bottom") {
+    refY = Math.max(...targets.map((c) => c.y + c.height));
+  } else if (mode === "centerH") {
+    const avgX = targets.reduce((acc, c) => acc + c.x + c.width / 2, 0) / targets.length;
+    refX = avgX;
+  } else if (mode === "centerV") {
+    const avgY = targets.reduce((acc, c) => acc + c.y + c.height / 2, 0) / targets.length;
+    refY = avgY;
+  }
+
+  components.update((all) =>
+    all.map((c) => {
+      if (!set.has(c.instanceId)) return c;
+      if (mode === "left") return { ...c, x: snapVal(refX) };
+      if (mode === "right") return { ...c, x: snapVal(refX - c.width) };
+      if (mode === "top") return { ...c, y: snapVal(refY) };
+      if (mode === "bottom") return { ...c, y: snapVal(refY - c.height) };
+      if (mode === "centerH") return { ...c, x: snapVal(refX - c.width / 2) };
+      if (mode === "centerV") return { ...c, y: snapVal(refY - c.height / 2) };
+      return c;
+    }),
+  );
+}
+
+export function distributeComponents(ids, axis = "h") {
+  if (!ids || ids.length < 3) return;
+  pushHistory();
+  const set = new Set(ids);
+  const cs = get(components);
+  const targets = cs.filter((c) => set.has(c.instanceId));
+  if (targets.length < 3) return;
+
+  const GRID = 20;
+  const snapVal = (v) => Math.round(v / GRID) * GRID;
+
+  if (axis === "h") {
+    const sorted = [...targets].sort((a, b) => a.x - b.x);
+    const minX = sorted[0].x;
+    const maxX = sorted[sorted.length - 1].x;
+    const step = (maxX - minX) / (sorted.length - 1);
+    const map = new Map();
+    sorted.forEach((c, idx) => {
+      map.set(c.instanceId, snapVal(minX + idx * step));
+    });
+    components.update((all) =>
+      all.map((c) => (map.has(c.instanceId) ? { ...c, x: map.get(c.instanceId) } : c)),
+    );
+  } else {
+    const sorted = [...targets].sort((a, b) => a.y - b.y);
+    const minY = sorted[0].y;
+    const maxY = sorted[sorted.length - 1].y;
+    const step = (maxY - minY) / (sorted.length - 1);
+    const map = new Map();
+    sorted.forEach((c, idx) => {
+      map.set(c.instanceId, snapVal(minY + idx * step));
+    });
+    components.update((all) =>
+      all.map((c) => (map.has(c.instanceId) ? { ...c, y: map.get(c.instanceId) } : c)),
+    );
+  }
 }
 
 export function removeComponent(id) {
@@ -465,12 +563,33 @@ export function getDiscoveredNets() {
   ws.forEach((w, idx) => {
     const fc = compMap[w.fromComp];
     const tc = compMap[w.toComp];
-    const netName = w.label?.trim() || `Net${idx + 1}`;
+
+    // Net Unification: match Net Ports or shared labels
+    let netName = w.label?.trim();
+    if (!netName) {
+      if (fc?.id === "gnd-flag" || tc?.id === "gnd-flag") netName = "GND";
+      else if (fc?.id === "vcc-flag" || tc?.id === "vcc-flag") netName = "+5V";
+      else if (fc?.id === "v33-flag" || tc?.id === "v33-flag") netName = "+3.3V";
+      else if (fc?.id === "v12-flag" || tc?.id === "v12-flag") netName = "+12V";
+      else netName = `Net${idx + 1}`;
+    }
+
+    const netColor =
+      w.color ||
+      (netName === "GND"
+        ? "#64748b"
+        : netName === "+5V"
+        ? "#ef4444"
+        : netName === "+3.3V"
+        ? "#f59e0b"
+        : netName === "+12V"
+        ? "#dc2626"
+        : "#4f9cf9");
 
     if (!netsMap.has(netName)) {
       netsMap.set(netName, {
         name: netName,
-        color: w.color || "#4f9cf9",
+        color: netColor,
         wireIds: [],
         pins: new Set(),
         connections: [],
