@@ -47,6 +47,7 @@
 
   // ── Drag (BUG FIX #1: use prop `scale` not window hack) ──
   let dragging = false, startX = 0, startY = 0, origX = 0, origY = 0
+  let hasMoved = false
 
   function onMouseDown(e) {
     if (e.button !== 0) return
@@ -63,28 +64,78 @@
     // Shift-click = add/remove from multiSelection
     dispatch('selectnode', { comp, shift: e.shiftKey })
     dragging = true
+    hasMoved = false
     startX = e.clientX; startY = e.clientY
     origX  = comp.x;    origY  = comp.y
-    // BUG FIX #1: notify Canvas of drag-start so origins can be snapshotted
     dispatch('dragstart', { instanceId: comp.instanceId })
     e.stopPropagation()
   }
 
   function onMouseMove(e) {
     if (!dragging) return
-    const dx = (e.clientX - startX) / scale   // BUG FIX #1: use prop
+    const dx = (e.clientX - startX) / scale
     const dy = (e.clientY - startY) / scale
     const G = 20
     const nx = Math.round((origX + dx) / G) * G
     const ny = Math.round((origY + dy) / G) * G
     if (nx !== comp.x || ny !== comp.y) {
-      // BUG FIX #1: send nx/ny (absolute) instead of dx/dy (stale delta)
+      if (!hasMoved) {
+        pushHistory()
+        hasMoved = true
+      }
       dispatch('dragged', { instanceId: comp.instanceId, nx, ny })
       updateComponent(comp.instanceId, { x: nx, y: ny })
     }
   }
 
-  function onMouseUp() { dragging = false }
+  function onMouseUp() {
+    dragging = false
+    hasMoved = false
+  }
+
+  function onTouchStart(e) {
+    if (e.touches.length !== 1) return
+    const target = e.target
+    if (target.dataset?.pin) {
+      if ($activeTool === 'wire') {
+        dispatch('pinclick', { comp, pinId: target.dataset.pin })
+        e.stopPropagation(); return
+      }
+    }
+    if ($activeTool !== 'select') return
+    const t = e.touches[0]
+    dispatch('selectnode', { comp, shift: false })
+    dragging = true
+    hasMoved = false
+    startX = t.clientX; startY = t.clientY
+    origX  = comp.x;    origY  = comp.y
+    dispatch('dragstart', { instanceId: comp.instanceId })
+    e.stopPropagation()
+  }
+
+  function onTouchMove(e) {
+    if (!dragging || e.touches.length !== 1) return
+    const t = e.touches[0]
+    const dx = (t.clientX - startX) / scale
+    const dy = (t.clientY - startY) / scale
+    const G = 20
+    const nx = Math.round((origX + dx) / G) * G
+    const ny = Math.round((origY + dy) / G) * G
+    if (nx !== comp.x || ny !== comp.y) {
+      if (!hasMoved) {
+        pushHistory()
+        hasMoved = true
+      }
+      dispatch('dragged', { instanceId: comp.instanceId, nx, ny })
+      updateComponent(comp.instanceId, { x: nx, y: ny })
+    }
+    e.stopPropagation()
+  }
+
+  function onTouchEnd() {
+    dragging = false
+    hasMoved = false
+  }
 
   // Feature #3: double-click on title bar → inline rename
   function onDblClick(e) {
@@ -176,7 +227,7 @@
   }
 </script>
 
-<svelte:window on:mousemove={onMouseMove} on:mouseup={onMouseUp}/>
+<svelte:window on:mousemove={onMouseMove} on:mouseup={onMouseUp} on:touchmove={onTouchMove} on:touchend={onTouchEnd}/>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <g
@@ -184,6 +235,7 @@
   class:highlighted={isHighlighted}
   transform="translate({comp.x},{comp.y}) rotate({comp.rotation || 0}, {comp.width/2}, {comp.height/2})"
   on:mousedown={onMouseDown}
+  on:touchstart={onTouchStart}
   on:dblclick={onDblClick}
   on:contextmenu={(e) => { dispatch('contextmenu', { comp, e }); e.preventDefault(); e.stopPropagation() }}
   role="button" tabindex="0" aria-label={comp.label}

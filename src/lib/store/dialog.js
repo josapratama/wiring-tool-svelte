@@ -105,3 +105,4 @@ export function closeDialog(result = null) {
     return { ...s, isOpen: false }
   })
 }
+

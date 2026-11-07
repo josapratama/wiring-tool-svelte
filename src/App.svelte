@@ -34,25 +34,41 @@
   let showWokwiModal = false
   let showQuickPalette = false
 
-  // Responsive sidebars & export menu
+  // Responsive sidebars & menus
   let showLeftSidebar = true
   let showRightSidebar = true
   let showExportMenu = false
+  let showFileMenu = false
+  let showColorPicker = false
 
   function toggleLeftSidebar() { showLeftSidebar = !showLeftSidebar }
   function toggleRightSidebar() { showRightSidebar = !showRightSidebar }
-  function toggleExportMenu(e) { e.stopPropagation(); showExportMenu = !showExportMenu }
-  function closeExportMenu() { showExportMenu = false }
+  function toggleExportMenu(e) {
+    e.stopPropagation()
+    showFileMenu = false
+    showColorPicker = false
+    showExportMenu = !showExportMenu
+  }
+  function toggleFileMenu(e) {
+    e.stopPropagation()
+    showExportMenu = false
+    showColorPicker = false
+    showFileMenu = !showFileMenu
+  }
+  function closeMenus() {
+    showExportMenu = false
+    showFileMenu = false
+    showColorPicker = false
+  }
 
   // Reactive ERC analysis
   $: ercResult = runERC($compsStore, $wiresStore)
 
   // ── Tools ─────────────────────────────────────────────
   const TOOLS = [
-    { id:'select', icon:'▲', title:'Select  V'  },
-    { id:'wire',   icon:'→', title:'Wire  W'    },
-    { id:'label',  icon:'T', title:'Label  L'   },
-    { id:'delete', icon:'🗑', title:'Delete mode' },
+    { id:'select', icon:'▲', label:'Select', title:'Mode Pilih (V)' },
+    { id:'wire',   icon:'⚡', label:'Wire',   title:'Tarik Kabel (W)' },
+    { id:'label',  icon:'T', label:'Label',  title:'Teks Label (L)' },
   ]
 
   function setTool(id) {
@@ -74,6 +90,7 @@
     { c:'#818cf8', t:'USB'         },
   ]
   let activeColor = '#ef4444'
+  $: activeColorObj = WIRE_COLORS.find(wc => wc.c.toLowerCase() === activeColor.toLowerCase()) || { c: activeColor, t: 'Custom' }
   function pickColor(c) { activeColor = c; canvasRef.setWireColor?.(c) }
 
   // ── Export / Import ───────────────────────────────────
@@ -416,7 +433,7 @@
   $: curTool = $activeTool
 </script>
 
-<svelte:window on:keydown={onKeyDown} on:click={closeExportMenu}/>
+<svelte:window on:keydown={onKeyDown} on:click={closeMenus}/>
 
 <div class="app" class:light-app={isLightMode}>
   <!-- HEADER ─────────────────────────────────────────── -->
@@ -473,6 +490,49 @@
       <button class="btn btn-code" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
         💻 <span class="btn-text">Code</span>
       </button>
+
+      <!-- File Dropdown -->
+      <div class="dropdown-wrap">
+        <button class="btn btn-secondary-icon btn-file" on:click={toggleFileMenu} title="Menu Berkas & Pengaturan Proyek">
+          📁 <span class="btn-text">File</span> <span class="arrow-down">▾</span>
+        </button>
+
+        {#if showFileMenu}
+          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+          <div class="export-dropdown file-dropdown" on:click|stopPropagation>
+            <div class="dd-title">Menu Proyek</div>
+            <button class="dd-item" on:click={() => { importJSON(); showFileMenu = false }}>
+              <span class="dd-icon">📥</span>
+              <div class="dd-info">
+                <span class="dd-label">Buka / Import JSON</span>
+                <span class="dd-desc">Muat diagram dari file komputer</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { showStats = true; showFileMenu = false }}>
+              <span class="dd-icon">📊</span>
+              <div class="dd-info">
+                <span class="dd-label">Statistik Diagram</span>
+                <span class="dd-desc">Rincian pin, kabel, dan modul</span>
+              </div>
+            </button>
+            <button class="dd-item" on:click={() => { showShortcuts = true; showFileMenu = false }}>
+              <span class="dd-icon">⌨</span>
+              <div class="dd-info">
+                <span class="dd-label">Keyboard Shortcuts</span>
+                <span class="dd-desc">Daftar tombol pintasan cepat</span>
+              </div>
+            </button>
+            <div class="dd-divider"></div>
+            <button class="dd-item dd-danger" on:click={() => { handleClearDiagram(); showFileMenu = false }}>
+              <span class="dd-icon">🗑️</span>
+              <div class="dd-info">
+                <span class="dd-label">Kosongkan Diagram</span>
+                <span class="dd-desc">Hapus seluruh isi kanvas saat ini</span>
+              </div>
+            </button>
+          </div>
+        {/if}
+      </div>
 
       <!-- Export Dropdown -->
       <div class="dropdown-wrap">
@@ -531,11 +591,6 @@
         {/if}
       </div>
 
-      <button class="btn btn-secondary-icon" on:click={importJSON} title="Import Diagram JSON">↑ <span class="btn-text">Import</span></button>
-      <button class="btn btn-secondary-icon" on:click={() => showStats = !showStats} title="Diagram Stats">📊</button>
-      <button class="btn btn-secondary-icon" on:click={() => showShortcuts = !showShortcuts} title="Shortcuts (?)">⌨</button>
-      <button class="btn btn-secondary-icon btn-clear" on:click={handleClearDiagram} title="Clear Diagram">🗑</button>
-
       <!-- Toggle Right Inspector Button -->
       <button class="nav-toggle-btn" on:click={toggleRightSidebar} title="Buka/Tutup Panel Properties" class:btn-active={showRightSidebar}>
         ⚙️ <span class="nav-toggle-lbl">Properties</span>
@@ -563,51 +618,80 @@
     <div class="canvas-col">
       <!-- TOOLBAR -->
       <div class="toolbar">
-        <!-- Tools -->
+        <!-- Tools Segment -->
         <div class="tg tool-group">
           {#each TOOLS as t}
             <button class="tbtn" class:active={curTool===t.id}
-              title={t.title} on:click={() => setTool(t.id)}>{t.icon}</button>
+              title={t.title} on:click={() => setTool(t.id)}>
+              <span class="tbtn-icon">{t.icon}</span>
+              <span class="tbtn-txt">{t.label}</span>
+            </button>
           {/each}
         </div>
+
         <!-- Routing Mode Toggle -->
         <div class="tg routing-tg">
-          <span class="col-lbl">Style:</span>
-          <button class="tbtn mode-btn" class:active={$routingMode === 'orthogonal'} on:click={() => routingMode.set('orthogonal')} title="Orthogonal 90° Manhattan style">⎶</button>
-          <button class="tbtn mode-btn" class:active={$routingMode === 'curved'} on:click={() => routingMode.set('curved')} title="Smooth Bezier Curve">〰</button>
-          <button class="tbtn mode-btn" class:active={$routingMode === 'direct'} on:click={() => routingMode.set('direct')} title="Straight Direct Line">╱</button>
+          <button class="tbtn mode-btn" class:active={$routingMode === 'orthogonal'} on:click={() => routingMode.set('orthogonal')} title="Siku 90° (Orthogonal)">
+            <span>⎶</span> <span class="tbtn-txt">Siku</span>
+          </button>
+          <button class="tbtn mode-btn" class:active={$routingMode === 'curved'} on:click={() => routingMode.set('curved')} title="Lengkung (Smooth Bezier)">
+            <span>〰</span> <span class="tbtn-txt">Lengkung</span>
+          </button>
+          <button class="tbtn mode-btn" class:active={$routingMode === 'direct'} on:click={() => routingMode.set('direct')} title="Lurus (Direct)">
+            <span>╱</span> <span class="tbtn-txt">Lurus</span>
+          </button>
         </div>
-        <!-- Zoom -->
-        <div class="tg zoom-group">
-          <button class="tbtn" on:click={() => canvasRef.zoomIn?.()}  title="Zoom In (+)">+</button>
-          <button class="tbtn" on:click={() => canvasRef.zoomOut?.()}  title="Zoom Out (−)">−</button>
-          <button class="tbtn" on:click={() => canvasRef.fitView?.()}  title="Fit View (F)">Fit</button>
-          <button class="tbtn" on:click={() => canvasRef.zoomToSelection?.()} title="Zoom to Selection (Shift+F)">⬚</button>
+
+        <!-- Wire Color Popover -->
+        <div class="tg wire-color-tg dropdown-wrap">
+          <button class="tbtn color-popover-btn" on:click|stopPropagation={() => showColorPicker = !showColorPicker} title="Pilih Warna Kabel">
+            <span class="cdot-active-preview" style="background:{activeColor}"></span>
+            <span class="col-lbl-name">{activeColorObj ? activeColorObj.t : 'Wire'}</span>
+            <span class="arrow-down-sm">▾</span>
+          </button>
+
+          {#if showColorPicker}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="color-popover" on:click|stopPropagation>
+              <div class="color-popover-title">Preset Warna Jalur & Kabel</div>
+              <div class="color-grid">
+                {#each WIRE_COLORS as wc}
+                  <button
+                    class="color-chip"
+                    class:chip-selected={activeColor === wc.c}
+                    on:click={() => { pickColor(wc.c); showColorPicker = false }}
+                    title="{wc.t} ({wc.c})"
+                  >
+                    <span class="chip-dot" style="background:{wc.c}"></span>
+                    <span class="chip-label">{wc.t}</span>
+                  </button>
+                {/each}
+              </div>
+              <div class="color-custom-row">
+                <span class="color-custom-lbl">Warna Bebas:</span>
+                <input type="color" value={activeColor} on:input={e => pickColor(e.target.value)} class="col-custom-inp" title="Custom color picker" />
+              </div>
+            </div>
+          {/if}
         </div>
-        <!-- Toggles -->
+
+        <!-- Canvas View Controls -->
         <div class="tg toggles-group">
-          <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()}    title="Grid (G)">⊞</button>
-          <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Minimap (M)">🗺</button>
+          <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()} title="Tampilkan/Sembunyikan Grid (G)">⊞ Grid</button>
+          <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Tampilkan/Sembunyikan Minimap (M)">🗺</button>
           <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema Kanvas (Light / Dark)">
             {isLightMode ? '☀️' : '🌙'}
           </button>
-          <button class="tbtn" on:click={undo} title="Undo Ctrl+Z">↩</button>
-          <button class="tbtn" on:click={redo} title="Redo Ctrl+Y">↪</button>
         </div>
-        <!-- Wire colors -->
-        <div class="tg wire-colors">
-          <span class="col-lbl">Wire:</span>
-          {#each WIRE_COLORS as wc}
-            <button class="cdot" class:cdot-active={activeColor===wc.c}
-              style="background:{wc.c}" title={wc.t}
-              on:click={() => pickColor(wc.c)} aria-label={wc.t}></button>
-          {/each}
-          <input type="color" value={activeColor} title="Custom color" class="col-custom"
-            on:input={e => pickColor(e.target.value)} aria-label="Custom wire color"/>
-        </div>
-        <!-- Shortcuts hint -->
-        <div class="tg shortcuts-hint">
-          <span>V W L Del F G M · Ctrl+K / · ? Shortcuts</span>
+
+        <!-- History & Zoom Controls -->
+        <div class="tg zoom-group">
+          <button class="tbtn" on:click={undo} title="Undo (Ctrl+Z)">↩</button>
+          <button class="tbtn" on:click={redo} title="Redo (Ctrl+Y)">↪</button>
+          <div class="tg-sep"></div>
+          <button class="tbtn" on:click={() => canvasRef.fitView?.()} title="Fit View (F)">Fit</button>
+          <button class="tbtn" on:click={() => canvasRef.zoomIn?.()} title="Zoom In (+)">+</button>
+          <button class="tbtn" on:click={() => canvasRef.zoomOut?.()} title="Zoom Out (−)">−</button>
         </div>
       </div>
 
@@ -782,7 +866,6 @@
 
   .btn-code{ background:#1e293b; }
   .btn-secondary-icon{ padding:6px 9px; }
-  .btn-clear:hover{ border-color:#ef4444; color:#ef4444; }
   .flash{ font-size:12px; color:#4ade80; font-weight:600; animation:fade-in .15s; }
 
   /* ── Export Dropdown ── */
@@ -804,6 +887,9 @@
   .dd-label{ font-size:11.5px; font-weight:600; color:#e2e8f0; }
   .dd-desc{ font-size:10px; color:#94a3b8; }
   .dd-divider{ height:1px; background:#1e293b; margin:4px 0; }
+  .dd-item.dd-danger:hover{ background:rgba(239,68,68,0.15); }
+  .dd-item.dd-danger:hover .dd-label{ color:#f87171; }
+  .file-dropdown{ right:0; width:220px; }
 
   /* ── Body ── */
   .body{ display:flex; flex:1; overflow:hidden; position:relative; }
@@ -825,26 +911,46 @@
     border-right:1px solid #1e293b; flex-shrink:0; }
   .tg:last-child{ border-right:none; }
   .tbtn{ background:transparent; border:1px solid transparent; border-radius:5px;
-    color:#94a3b8; padding:4px 7px; cursor:pointer; font-size:13px;
+    color:#94a3b8; padding:4px 8px; cursor:pointer; font-size:12px;
     min-width:28px; height:28px; display:flex; align-items:center; justify-content:center;
-    transition:all .1s; }
+    gap:4px; transition:all .1s; }
   .tbtn:hover{ background:#1e293b; color:#f8fafc; border-color:#334155; }
   .tbtn.active{ background:#0284c7; color:#fff; border-color:#38bdf8; }
 
   .routing-tg{ gap:2px; }
-  .mode-btn{ font-size:11px; font-weight:600; padding:3px 6px; }
+  .mode-btn{ font-size:11px; font-weight:600; padding:3px 7px; }
   .theme-toggle-btn{ font-size:12px; }
 
-  .wire-colors{ gap:5px; }
-  .col-lbl{ font-size:11px; color:#64748b; font-weight:600; }
-  .cdot{ width:18px; height:18px; border-radius:50%; border:2px solid transparent;
-    cursor:pointer; transition:transform .1s; flex-shrink:0; }
-  .cdot:hover{ transform:scale(1.2); }
-  .cdot.cdot-active{ border-color:#fff; transform:scale(1.2); box-shadow:0 0 6px rgba(255,255,255,.4); }
-  .col-custom{ width:20px; height:20px; border:none; border-radius:50%;
-    cursor:pointer; padding:0; background:none; }
+  /* Wire Color Popover */
+  .wire-color-tg{ position:relative; }
+  .color-popover-btn{ display:flex; align-items:center; gap:6px; padding:4px 9px;
+    border:1px solid #334155; border-radius:5px; background:#1e293b; color:#cbd5e1; cursor:pointer; }
+  .color-popover-btn:hover{ background:#273549; border-color:#475569; color:#fff; }
+  .cdot-active-preview{ width:12px; height:12px; border-radius:50%; box-shadow:0 0 4px rgba(255,255,255,0.3); flex-shrink:0; }
+  .col-lbl-name{ font-size:11px; font-weight:600; max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .arrow-down-sm{ font-size:9px; opacity:0.7; }
 
-  .shortcuts-hint{ font-size:10px; color:#475569; white-space:nowrap; }
+  .color-popover{ position:absolute; top:calc(100% + 6px); left:0; width:240px;
+    background:#0f172a; border:1px solid #334155; border-radius:8px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.6); padding:10px; z-index:100;
+    display:flex; flex-direction:column; gap:6px; animation:pop-down .12s ease-out; }
+  .color-popover-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#64748b; }
+  .color-grid{ display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+  .color-chip{ display:flex; align-items:center; gap:6px; padding:5px 7px;
+    background:#1e293b; border:1px solid #334155; border-radius:5px;
+    cursor:pointer; color:#cbd5e1; font-size:11px; text-align:left; transition:all .1s; }
+  .color-chip:hover{ background:#273549; color:#fff; border-color:#475569; }
+  .color-chip.chip-selected{ border-color:#38bdf8; background:#0c4a6e; color:#fff; font-weight:600; }
+  .chip-dot{ width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+  .chip-label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+
+  .color-custom-row{ display:flex; align-items:center; justify-content:space-between;
+    margin-top:4px; padding-top:6px; border-top:1px solid #1e293b; font-size:11px; color:#94a3b8; }
+  .col-custom-inp{ width:24px; height:24px; border:none; border-radius:4px; cursor:pointer; background:none; }
+
+  .tg-sep{ width:1px; height:16px; background:#334155; margin:0 3px; }
+  .tbtn-icon{ font-size:13px; line-height:1; }
+  .tbtn-txt{ font-size:11px; font-weight:600; }
 
   /* ── Right sidebar ── */
   .rsb{ width:260px; flex-shrink:0; background:#0f172a;
@@ -927,6 +1033,12 @@
   .app.light-app .dd-item:hover { background: #f1f5f9; }
   .app.light-app .dd-label { color: #0f172a; }
   .app.light-app .dd-divider { background: #e2e8f0; }
+  .app.light-app .color-popover { background: #ffffff; border-color: #cbd5e1; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+  .app.light-app .color-chip { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
+  .app.light-app .color-chip:hover { background: #f1f5f9; color: #0f172a; border-color: #94a3b8; }
+  .app.light-app .color-chip.chip-selected { background: #e0f2fe; border-color: #0284c7; color: #0369a1; }
+  .app.light-app .color-popover-btn { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
+  .app.light-app .color-custom-row { border-top-color: #e2e8f0; color: #64748b; }
 
   /* ── RESPONSIVE MEDIA QUERIES ── */
   @media (max-width: 1023px) {
@@ -957,8 +1069,8 @@
     .hdr { padding: 0 8px; gap: 6px; }
     .proj-name { max-width: 140px; font-size: 13px; }
     .nav-toggle-lbl, .btn-text { display: none; }
-    .shortcuts-hint { display: none; }
     .badge { display: none; }
+    .tbtn-txt, .col-lbl-name { display: none; }
   }
 
   @media (max-width: 480px) {
