@@ -83,8 +83,30 @@ export function pinPos(comp) {
       }
     }
 
+    if (comp.flipX) {
+      base = {
+        ...base,
+        x: x + W - (base.x - x),
+        side: base.side === "left" ? "right" : base.side === "right" ? "left" : base.side,
+      };
+    }
+
+    if (comp.flipY) {
+      base = {
+        ...base,
+        y: y + H - (base.y - y),
+        side: base.side === "top" ? "bottom" : base.side === "bottom" ? "top" : base.side,
+      };
+    }
+
     const rot = Math.round((((comp.rotation ?? 0) % 360) + 360) % 360);
-    if (rot === 0) return base;
+    if (rot === 0) {
+      return {
+        x: Math.round(base.x * 10) / 10,
+        y: Math.round(base.y * 10) / 10,
+        side: base.side,
+      };
+    }
 
     const cx = x + W / 2;
     const cy = y + H / 2;

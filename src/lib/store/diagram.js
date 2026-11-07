@@ -25,6 +25,10 @@ export const selection = writable(null); // { id, type }
 export const multiSelection = writable([]); // [{ id, type }]
 export const activeTool = writable("select");
 export const routingMode = writable("orthogonal"); // 'orthogonal' | 'curved' | 'direct'
+export const edaGridType = writable("dots"); // 'dots' | 'lines' | 'off'
+export const showDrawingSheet = writable(true);
+export const highlightedWireIds = writable(new Set());
+export const activeHighlightedNet = writable(null);
 
 // ── History ───────────────────────────────────────────────
 const undoStack = [];
@@ -162,6 +166,34 @@ export function rotateComponents(ids, deg = 90) {
       if (set.has(c.instanceId)) {
         const nextRot = (((c.rotation || 0) + deg) % 360 + 360) % 360;
         return { ...c, rotation: nextRot };
+      }
+      return c;
+    }),
+  );
+}
+
+export function flipComponentX(id) {
+  pushHistory();
+  components.update((cs) =>
+    cs.map((c) => (c.instanceId === id ? { ...c, flipX: !c.flipX } : c)),
+  );
+}
+
+export function flipComponentY(id) {
+  pushHistory();
+  components.update((cs) =>
+    cs.map((c) => (c.instanceId === id ? { ...c, flipY: !c.flipY } : c)),
+  );
+}
+
+export function flipComponents(ids, axis = "x") {
+  if (!ids?.length) return;
+  pushHistory();
+  const set = new Set(ids);
+  components.update((cs) =>
+    cs.map((c) => {
+      if (set.has(c.instanceId)) {
+        return axis === "x" ? { ...c, flipX: !c.flipX } : { ...c, flipY: !c.flipY };
       }
       return c;
     }),
@@ -409,5 +441,63 @@ export function getBOM() {
     id: g.id,
     theme: g.theme,
     instances: g.instances,
+  }));
+}
+
+// ── Feature: EasyEDA Net Highlighting & Discovered Nets ─────────
+export function setHighlightedNet(netName, wireIds = []) {
+  activeHighlightedNet.set(netName);
+  highlightedWireIds.set(new Set(wireIds));
+}
+
+export function clearHighlightedNet() {
+  activeHighlightedNet.set(null);
+  highlightedWireIds.set(new Set());
+}
+
+export function getDiscoveredNets() {
+  const cs = get(components);
+  const ws = get(wires);
+  const compMap = Object.fromEntries(cs.map((c) => [c.instanceId, c]));
+
+  const netsMap = new Map();
+
+  ws.forEach((w, idx) => {
+    const fc = compMap[w.fromComp];
+    const tc = compMap[w.toComp];
+    const netName = w.label?.trim() || `Net${idx + 1}`;
+
+    if (!netsMap.has(netName)) {
+      netsMap.set(netName, {
+        name: netName,
+        color: w.color || "#4f9cf9",
+        wireIds: [],
+        pins: new Set(),
+        connections: [],
+      });
+    }
+
+    const net = netsMap.get(netName);
+    net.wireIds.push(w.id);
+    if (fc) {
+      net.pins.add(`${fc.label || fc.id}:${w.fromPin}`);
+    }
+    if (tc) {
+      net.pins.add(`${tc.label || tc.id}:${w.toPin}`);
+    }
+    net.connections.push({
+      wireId: w.id,
+      from: fc?.label ?? w.fromComp,
+      fromPin: w.fromPin,
+      to: tc?.label ?? w.toComp,
+      toPin: w.toPin,
+      color: w.color || "#4f9cf9",
+    });
+  });
+
+  return Array.from(netsMap.values()).map((n) => ({
+    ...n,
+    pinCount: n.pins.size,
+    pinList: Array.from(n.pins),
   }));
 }

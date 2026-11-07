@@ -674,6 +674,61 @@ export const CATEGORIES = [
       },
     ],
   },
+  {
+    id: "ports",
+    label: "Net Ports & Flags",
+    icon: "🚩",
+    items: [
+      {
+        id: "gnd-flag",
+        name: "GND Port",
+        theme: "power",
+        isNetPort: true,
+        width: 70,
+        height: 60,
+        desc: "Ground 0V Reference Flag (⏚)",
+        pins: [
+          { id: "GND", label: "GND", side: "top", pos: 0.5, type: "gnd" },
+        ],
+      },
+      {
+        id: "vcc-flag",
+        name: "+5V Port",
+        theme: "power",
+        isNetPort: true,
+        width: 70,
+        height: 60,
+        desc: "+5V Power Supply Flag (▲)",
+        pins: [
+          { id: "VCC", label: "+5V", side: "bottom", pos: 0.5, type: "power" },
+        ],
+      },
+      {
+        id: "v33-flag",
+        name: "+3.3V Port",
+        theme: "power",
+        isNetPort: true,
+        width: 70,
+        height: 60,
+        desc: "+3.3V Power Supply Flag (▲)",
+        pins: [
+          { id: "3V3", label: "+3.3V", side: "bottom", pos: 0.5, type: "power" },
+        ],
+      },
+      {
+        id: "v12-flag",
+        name: "+12V Port",
+        theme: "power",
+        isNetPort: true,
+        width: 70,
+        height: 60,
+        desc: "+12V Power Supply Flag (▲)",
+        pins: [
+          { id: "12V", label: "+12V", side: "bottom", pos: 0.5, type: "power" },
+        ],
+      },
+    ],
+  },
 ];
 
 const CUSTOM_KEY = "wiretool_custom_components";

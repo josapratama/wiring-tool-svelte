@@ -237,6 +237,9 @@
     }
     return { path, tx, ty, anchor }
   }
+  $: isNetPort = comp.isNetPort || comp.id === 'gnd-flag' || comp.id === 'vcc-flag' || comp.id === 'v33-flag' || comp.id === 'v12-flag'
+  $: flipTransform = `translate(${comp.width/2}, ${comp.height/2}) scale(${comp.flipX ? -1 : 1}, ${comp.flipY ? -1 : 1}) translate(${-comp.width/2}, ${-comp.height/2})`
+  $: fullTransform = `translate(${comp.x},${comp.y}) rotate(${comp.rotation || 0}, ${comp.width/2}, ${comp.height/2}) ${flipTransform}`
 </script>
 
 <svelte:window on:mousemove={onMouseMove} on:mouseup={onMouseUp} on:touchmove={onTouchMove} on:touchend={onTouchEnd}/>
@@ -245,38 +248,89 @@
 <g
   class="comp-node"
   class:highlighted={isHighlighted}
-  transform="translate({comp.x},{comp.y}) rotate({comp.rotation || 0}, {comp.width/2}, {comp.height/2})"
+  class:is-net-port={isNetPort}
+  transform={fullTransform}
   on:mousedown={onMouseDown}
   on:touchstart={onTouchStart}
   on:dblclick={onDblClick}
   on:contextmenu={(e) => { dispatch('contextmenu', { comp, e }); e.preventDefault(); e.stopPropagation() }}
   role="button" tabindex="0" aria-label={comp.label}
 >
-  <!-- Shadow when selected -->
-  {#if isHighlighted}
-    <rect width={comp.width} height={comp.height} rx="7" ry="7"
-      fill="none" stroke={strokeColor} stroke-width="8" opacity="0.15"/>
-  {/if}
+  {#if isNetPort}
+    <!-- Specialized EasyEDA Net Port / Power Flag Rendering -->
+    {@const pin = (comp.pins ?? [])[0]}
+    {@const col = pin ? pinColor(pin.type) : '#ef4444'}
+    {@const isGnd = comp.id === 'gnd-flag'}
+    {@const pinKey = `${comp.instanceId}::${pin?.id}`}
+    {@const isSrc = activeWireSourceKey === pinKey}
+    {@const isCompat = compatiblePins ? compatiblePins.has(pinKey) : false}
+    {@const isDim = compatiblePins && !isCompat && !isSrc}
+    {@const used = pin ? usedPins.has(pin.id) : false}
 
-  <!-- Body -->
-  <rect class="comp-body" width={comp.width} height={comp.height} rx="6" ry="6"
-    fill={theme.body} stroke={strokeColor} stroke-width={strokeWidth}/>
+    {#if isGnd}
+      <!-- ⏚ GND FLAG (Symbol pointing down, pin at top) -->
+      <line x1={comp.width/2} y1="0" x2={comp.width/2} y2="28" stroke={col} stroke-width="2.5" pointer-events="none"/>
+      <line x1={comp.width/2 - 16} y1="28" x2={comp.width/2 + 16} y2="28" stroke={col} stroke-width="3" pointer-events="none"/>
+      <line x1={comp.width/2 - 10} y1="34" x2={comp.width/2 + 10} y2="34" stroke={col} stroke-width="2.5" pointer-events="none"/>
+      <line x1={comp.width/2 - 4} y1="40" x2={comp.width/2 + 4} y2="40" stroke={col} stroke-width="1.8" pointer-events="none"/>
+      <text x={comp.width/2} y="54" class="netport-txt" class:flip-h={comp.flipX} class:flip-v={comp.flipY}
+        text-anchor="middle" fill={col} font-weight="700" font-size="11">GND</text>
+      <!-- Pin at top center -->
+      {#if isCompat}
+        <circle cx={comp.width/2} cy="0" r={PIN_R + 5} fill="none" stroke="#4ade80" stroke-width="2" class="glow-ring" pointer-events="none"/>
+      {/if}
+      <circle class="pin-dot" class:pin-compatible={isCompat} class:pin-source={isSrc} class:pin-dimmed={isDim}
+        cx={comp.width/2} cy="0" r={PIN_R}
+        fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
+        data-pin={pin?.id} data-comp={comp.instanceId}>
+        <title>GND (0V Ground Flag)</title>
+      </circle>
+    {:else}
+      <!-- ▲ POWER FLAG (+5V, +3.3V, +12V - Arrow pointing up, pin at bottom) -->
+      {@const pwrLabel = comp.id === 'v33-flag' ? '+3.3V' : comp.id === 'v12-flag' ? '+12V' : '+5V'}
+      <line x1={comp.width/2} y1={comp.height} x2={comp.width/2} y2="28" stroke={col} stroke-width="2.5" pointer-events="none"/>
+      <!-- Upward Arrow Triangle -->
+      <polygon points="{comp.width/2},10 {comp.width/2 - 12},28 {comp.width/2 + 12},28" fill={col} stroke={col} stroke-width="1"/>
+      <text x={comp.width/2} y="7" class="netport-txt" class:flip-h={comp.flipX} class:flip-v={comp.flipY}
+        text-anchor="middle" fill={col} font-weight="700" font-size="11">{pwrLabel}</text>
+      <!-- Pin at bottom center -->
+      {#if isCompat}
+        <circle cx={comp.width/2} cy={comp.height} r={PIN_R + 5} fill="none" stroke="#4ade80" stroke-width="2" class="glow-ring" pointer-events="none"/>
+      {/if}
+      <circle class="pin-dot" class:pin-compatible={isCompat} class:pin-source={isSrc} class:pin-dimmed={isDim}
+        cx={comp.width/2} cy={comp.height} r={PIN_R}
+        fill={col} stroke={used ? '#fff' : '#0d0d1a'} stroke-width={used ? 2.5 : 1.5}
+        data-pin={pin?.id} data-comp={comp.instanceId}>
+        <title>{pwrLabel} Power Port</title>
+      </circle>
+    {/if}
+  {:else}
+    <!-- Regular Component Rendering -->
+    <!-- Shadow when selected -->
+    {#if isHighlighted}
+      <rect width={comp.width} height={comp.height} rx="7" ry="7"
+        fill="none" stroke={strokeColor} stroke-width="8" opacity="0.15"/>
+    {/if}
 
-  <!-- Title bar -->
-  <rect x="1" y="1" width={comp.width - 2} height={TITLE_H - 4}
-    rx="5" ry="5" fill={theme.title}/>
+    <!-- Body -->
+    <rect class="comp-body" width={comp.width} height={comp.height} rx="6" ry="6"
+      fill={theme.body} stroke={strokeColor} stroke-width={strokeWidth}/>
 
-  <!-- Label -->
-  <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" fill={theme.text}
-    dominant-baseline="central" text-anchor="middle">{comp.label}</text>
+    <!-- Title bar -->
+    <rect x="1" y="1" width={comp.width - 2} height={TITLE_H - 4}
+      rx="5" ry="5" fill={theme.title}/>
 
-  <!-- Sub-label -->
-  <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" fill={theme.subtext}
-    text-anchor="middle">{comp.id}</text>
+    <!-- Label -->
+    <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={theme.text}
+      dominant-baseline="central" text-anchor="middle">{comp.label}</text>
 
-  <!-- Divider -->
-  <line x1="1" y1={TITLE_H} x2={comp.width - 1} y2={TITLE_H}
-    stroke={theme.border} stroke-width="1" opacity="0.4"/>
+    <!-- Sub-label -->
+    <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={theme.subtext}
+      text-anchor="middle">{comp.id}</text>
+
+    <!-- Divider -->
+    <line x1="1" y1={TITLE_H} x2={comp.width - 1} y2={TITLE_H}
+      stroke={theme.border} stroke-width="1" opacity="0.4"/>
 
   <!-- MCU pins -->
   {#if mcuData}
@@ -403,9 +457,10 @@
     {/each}
     {#if comp.props}
       {#each Object.entries(comp.props) as [k,v], i}
-        <text x={comp.width/2} y={TITLE_H+22+i*16} class="comp-prop" fill={isLightMode ? '#475569' : '#8888aa'} text-anchor="middle">{k}: {v}</text>
+        <text x={comp.width/2} y={TITLE_H+22+i*16} class="comp-prop" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={isLightMode ? '#475569' : '#8888aa'} text-anchor="middle">{k}: {v}</text>
       {/each}
     {/if}
+  {/if}
   {/if}
 </g>
 
@@ -418,6 +473,20 @@
   .pin-label   { font:600 11px/1 'Consolas','Courier New',monospace; pointer-events:none; }
   .pin-num     { font:9px/1 'Consolas',monospace; pointer-events:none; }
   .comp-prop   { font:11px/1 'Consolas',monospace; pointer-events:none; }
+  .netport-txt { font-family:'Consolas',monospace; pointer-events:none; }
+  .comp-label, .comp-sublabel, .pin-label, .pin-num, .comp-prop, .pwr-label, .netport-txt {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .flip-h {
+    transform: scaleX(-1);
+  }
+  .flip-v {
+    transform: scaleY(-1);
+  }
+  .flip-h.flip-v {
+    transform: scale(-1, -1);
+  }
   .pin-dot     { cursor:crosshair; transition:r 0.12s, opacity 0.15s; }
   .pin-dot:hover { r:10; stroke:#fff !important; stroke-width:2 !important; }
   .pin-compatible {

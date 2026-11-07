@@ -17,6 +17,7 @@
     addComponent, addWire, addLabel, removeLabel, removeWire, removeComponent,
     updateLabel, updateComponent, updateWire, duplicateComponent, pushHistory,
     rotateComponent, rotateComponents,
+    edaGridType, showDrawingSheet, highlightedWireIds as highlightedWireIdsStore,
     getConnectedWireIds, getUsedPins
   } from '$lib/store/diagram.js'
 
@@ -30,12 +31,14 @@
   // then calls:  canvasRef?.fitView()
   export let api = {}
   export let isLightMode = false
+  export let projectName = 'ESP32-S3 FI Diagnostic'
 
   $: Object.assign(api, {
     fitView, zoomIn, zoomOut, zoomToSelection,
-    toggleGrid, toggleMinimap,
+    toggleGrid, toggleMinimap, toggleSheet,
     handleDrop, setWireColor, cancelWire,
-    selectWire, selectComponent, getViewCenter
+    selectWire, selectComponent, getViewCenter,
+    panToComponent, quickPlaceComponent
   })
 
   function getViewCenter() {
@@ -43,6 +46,28 @@
       x: Math.round((canvasW / 2 - vx) / vscale),
       y: Math.round((canvasH / 2 - vy) / vscale)
     }
+  }
+
+  function panToComponent(instanceId) {
+    const comp = $components.find(c => c.instanceId === instanceId)
+    if (!comp || !containerEl) return
+    selection.set({ id: comp.instanceId, type: 'component' })
+    multiSelection.set([{ id: comp.instanceId, type: 'component' }])
+    const cw = containerEl.offsetWidth || canvasW
+    const ch = containerEl.offsetHeight || canvasH
+    const targetX = cw / 2 - (comp.x + comp.width / 2) * vscale
+    const targetY = ch / 2 - (comp.y + comp.height / 2) * vscale
+    setViewport(targetX, targetY, vscale)
+  }
+
+  function quickPlaceComponent(compId) {
+    const center = getViewCenter()
+    const c = addComponent({ id: compId, x: snap(center.x - 35), y: snap(center.y - 30) })
+    selection.set({ id: c.instanceId, type: 'component' })
+    multiSelection.set([{ id: c.instanceId, type: 'component' }])
+    pushHistory()
+    flashStatus(`Part ${c.name || c.id} placed ✓`)
+    return c
   }
 
   // ── Viewport ──────────────────────────────────────────
@@ -287,9 +312,18 @@
     )
   }
 
-  // ── Grid ──────────────────────────────────────────────
-  let showGrid = true
-  function toggleGrid() { showGrid = !showGrid }
+  // ── Grid & Sheet ───────────────────────────────────────
+  function toggleGrid() {
+    edaGridType.update(t => {
+      if (t === 'dots') return 'lines'
+      if (t === 'lines') return 'off'
+      return 'dots'
+    })
+  }
+
+  function toggleSheet() {
+    showDrawingSheet.update(s => !s)
+  }
 
   // ── Minimap ───────────────────────────────────────────
   let showMinimap = true
@@ -496,9 +530,9 @@
   function cancelWire() { wireStart = null; snapTarget = null }
 
   // ── Net Highlighting & Connection Glow ──────────────────
-  $: highlightedWireIds = (() => {
+  $: effectiveHighlightedWires = (() => {
     const ws = $wires
-    const ids = new Set()
+    const ids = new Set($highlightedWireIdsStore)
     const selWireId = $selection?.type === 'wire' ? $selection.id : null
     const selCompId = $selection?.type === 'component' ? $selection.id : null
 
@@ -790,6 +824,30 @@
     class:cur-del={$activeTool==='delete'}
   >
     <defs>
+      <!-- EasyEDA Dot Grid (Dark) -->
+      <pattern id="grid-dots-sm" width="20" height="20" patternUnits="userSpaceOnUse"
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <circle cx="10" cy="10" r="1.1" fill="#334155"/>
+      </pattern>
+      <pattern id="grid-dots" width="100" height="100" patternUnits="userSpaceOnUse"
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <rect width="100" height="100" fill="url(#grid-dots-sm)"/>
+        <circle cx="10" cy="10" r="1.8" fill="#64748b"/>
+      </pattern>
+
+      <!-- EasyEDA Dot Grid (Light) -->
+      <pattern id="grid-dots-sm-light" width="20" height="20" patternUnits="userSpaceOnUse"
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <circle cx="10" cy="10" r="1.1" fill="#cbd5e1"/>
+      </pattern>
+      <pattern id="grid-dots-light" width="100" height="100" patternUnits="userSpaceOnUse"
+        patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <rect width="100" height="100" fill="#f8fafc"/>
+        <rect width="100" height="100" fill="url(#grid-dots-sm-light)"/>
+        <circle cx="10" cy="10" r="1.8" fill="#94a3b8"/>
+      </pattern>
+
+      <!-- Traditional Line Grid (Dark) -->
       <pattern id="grid-sm" width="20" height="20" patternUnits="userSpaceOnUse"
         patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1c1c38" stroke-width="0.5"/>
@@ -799,6 +857,8 @@
         <rect width="100" height="100" fill="url(#grid-sm)"/>
         <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#28284a" stroke-width="1"/>
       </pattern>
+
+      <!-- Traditional Line Grid (Light) -->
       <pattern id="grid-sm-light" width="20" height="20" patternUnits="userSpaceOnUse"
         patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
@@ -816,15 +876,70 @@
     </defs>
 
     <!-- Background -->
-    {#if showGrid}
+    {#if $edaGridType === 'dots'}
+      <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? 'url(#grid-dots-light)' : 'url(#grid-dots)'}/>
+    {:else if $edaGridType === 'lines'}
       <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? 'url(#grid-light)' : 'url(#grid-lg)'}/>
     {:else}
       <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? '#f8fafc' : '#0d0d1a'}/>
     {/if}
 
     <g transform="translate({svgVx},{svgVy}) scale({svgVscale})">
-      <!-- Wires layer -->
-      <WireLayer components={$components} {previewData} {wireColor} snapTargetPin={snapTarget} {highlightedWireIds}/>
+      <!-- EasyEDA Schematic Drawing Sheet Frame with Zone Margins and Title Block -->
+      {#if $showDrawingSheet}
+        <g class="cad-sheet-frame" pointer-events="none">
+          <!-- Outer border -->
+          <rect x="-40" y="-40" width="2400" height="1500" fill="none"
+            stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="2" opacity="0.8"/>
+          <!-- Inner border with zone margin -->
+          <rect x="-20" y="-20" width="2360" height="1460" fill="none"
+            stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1" opacity="0.6"/>
+          
+          <!-- Zone markers top & bottom (1 to 8) -->
+          {#each ['1','2','3','4','5','6','7','8'] as num, i}
+            {@const zx = -20 + (i + 0.5) * (2360 / 8)}
+            <text x={zx} y="-27" fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle">{num}</text>
+            <text x={zx} y="1454" fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle">{num}</text>
+          {/each}
+          <!-- Zone markers left & right (A to F) -->
+          {#each ['A','B','C','D','E','F'] as char, i}
+            {@const zy = -20 + (i + 0.5) * (1460 / 6)}
+            <text x="-31" y={zy} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle">{char}</text>
+            <text x="2350" y={zy} fill={isLightMode ? "#ef4444" : "#dc2626"} font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle">{char}</text>
+          {/each}
+
+          <!-- Professional Title Block at bottom-right corner -->
+          <g transform="translate(1940, 1300)">
+            <rect width="400" height="140" fill={isLightMode ? "#ffffff" : "#0f172a"}
+              stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1.8"/>
+            <line x1="0" y1="36" x2="400" y2="36" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="0" y1="78" x2="400" y2="78" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="220" y1="36" x2="220" y2="140" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+            <line x1="310" y1="78" x2="310" y2="140" stroke={isLightMode ? "#ef4444" : "#dc2626"} stroke-width="1"/>
+
+            <text x="14" y="24" font-size="14" font-weight="800" fill={isLightMode ? "#1e293b" : "#f8fafc"}>EASYEDA SCHEMATIC</text>
+            <text x="386" y="24" text-anchor="end" font-size="11" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>WireTool v2.2</text>
+
+            <text x="14" y="52" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>TITLE:</text>
+            <text x="14" y="68" font-size="13" font-weight="700" fill={isLightMode ? "#0f172a" : "#38bdf8"}>{projectName || 'Schematic Design'}</text>
+
+            <text x="230" y="52" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>DESIGNER:</text>
+            <text x="230" y="68" font-size="12" font-weight="600" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>Electronics Eng</text>
+
+            <text x="14" y="96" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>DATE:</text>
+            <text x="14" y="118" font-size="11" font-weight="600" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>{new Date().toISOString().slice(0, 10)}</text>
+
+            <text x="230" y="96" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>REV:</text>
+            <text x="230" y="118" font-size="12" font-weight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>1.0</text>
+
+            <text x="320" y="96" font-size="9" font-weight="600" fill={isLightMode ? "#64748b" : "#94a3b8"}>SHEET:</text>
+            <text x="320" y="118" font-size="12" font-weight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>1 / 1</text>
+          </g>
+        </g>
+      {/if}
+
+      <!-- Wires layer with active net highlight -->
+      <WireLayer components={$components} {previewData} {wireColor} snapTargetPin={snapTarget} highlightedWireIds={effectiveHighlightedWires}/>
 
       <!-- Labels -->
       {#each $labels as lbl (lbl.id)}

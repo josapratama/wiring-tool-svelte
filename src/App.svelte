@@ -16,6 +16,8 @@
     selection, multiSelection, routingMode,
     components as compsStore, wires as wiresStore,
     duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
+    flipComponentX, flipComponentY, flipComponents,
+    edaGridType, showDrawingSheet,
     removeComponent, removeComponents,
     removeWire, removeLabel,
     getAutoSave, clearAutoSave, initAutoSave
@@ -40,25 +42,86 @@
   let showExportMenu = false
   let showFileMenu = false
   let showColorPicker = false
+  let activeRibbon = null // 'file' | 'edit' | 'place' | 'view' | 'design' | 'help' | null
 
   function toggleLeftSidebar() { showLeftSidebar = !showLeftSidebar }
   function toggleRightSidebar() { showRightSidebar = !showRightSidebar }
+  function toggleRibbon(menu, e) {
+    e?.stopPropagation()
+    activeRibbon = activeRibbon === menu ? null : menu
+    showExportMenu = false
+    showColorPicker = false
+  }
   function toggleExportMenu(e) {
-    e.stopPropagation()
+    e?.stopPropagation()
+    activeRibbon = null
     showFileMenu = false
     showColorPicker = false
     showExportMenu = !showExportMenu
   }
-  function toggleFileMenu(e) {
-    e.stopPropagation()
-    showExportMenu = false
-    showColorPicker = false
-    showFileMenu = !showFileMenu
-  }
-  function closeMenus() {
+  function closeAllMenus() {
+    activeRibbon = null
     showExportMenu = false
     showFileMenu = false
     showColorPicker = false
+  }
+
+  // ── EasyEDA CAD Quick Actions ─────────────────────────
+  function placeGND() {
+    canvasRef.quickPlaceComponent?.('gnd-flag')
+    flash('Net Flag GND diletakkan (⏚) ✓')
+  }
+
+  function placeVCC(id = 'vcc-flag') {
+    canvasRef.quickPlaceComponent?.(id)
+    flash('Power Port diletakkan (▲) ✓')
+  }
+
+  function selectAll() {
+    multiSelection.set($compsStore.map(c => ({ id: c.instanceId, type: 'component' })))
+    flash(`Semua komponen dipilih (${$compsStore.length})`)
+  }
+
+  function doRotate(deg = 90) {
+    const ms = $multiSelection
+    if (ms.length > 1) {
+      rotateComponents(ms.filter(s => s.type === 'component').map(s => s.id), deg)
+    } else if ($selection?.type === 'component') {
+      rotateComponent($selection.id, deg)
+    }
+  }
+
+  function doFlipX() {
+    const ms = $multiSelection
+    if (ms.length > 1) {
+      flipComponents(ms.filter(s => s.type === 'component').map(s => s.id), 'x')
+    } else if ($selection?.type === 'component') {
+      flipComponentX($selection.id)
+    }
+    flash('Flip Horizontal (X) ✓')
+  }
+
+  function doFlipY() {
+    const ms = $multiSelection
+    if (ms.length > 1) {
+      flipComponents(ms.filter(s => s.type === 'component').map(s => s.id), 'y')
+    } else if ($selection?.type === 'component') {
+      flipComponentY($selection.id)
+    }
+    flash('Flip Vertical (Y) ✓')
+  }
+
+  function doDelete() {
+    const ms = $multiSelection
+    if (ms.length > 1) {
+      removeComponents(ms.filter(s => s.type === 'component').map(s => s.id))
+      return
+    }
+    const s = $selection
+    if (!s) return
+    if (s.type === 'component') removeComponent(s.id)
+    else if (s.type === 'wire') removeWire(s.id)
+    else if (s.type === 'label') removeLabel(s.id)
   }
 
   // Reactive ERC analysis
@@ -276,24 +339,29 @@
   // ── Feature #8: Shortcut overlay ──────────────────────
   let showShortcuts = false
   const SHORTCUTS = [
-    { key:'Ctrl+K / /',desc:'Cari & pasang komponen cepat' },
-    { key:'V',        desc:'Select tool' },
-    { key:'W',        desc:'Wire tool' },
-    { key:'L',        desc:'Label tool' },
+    { key:'Ctrl+K / /',desc:'Cari & pasang komponen (EELib)' },
+    { key:'V',        desc:'Select tool (Mode Pilih)' },
+    { key:'W',        desc:'Wire tool (Tarik Jalur Kabel)' },
+    { key:'T / L',    desc:'Text / Net Label' },
+    { key:'P',        desc:'Pasang Power Port (▲ VCC)' },
+    { key:'Shift+G',  desc:'Pasang Ground Port (⏚ GND)' },
     { key:'R',        desc:'Rotate 90° (Shift = -90°)' },
-    { key:'Del',      desc:'Delete selected' },
-    { key:'F',        desc:'Fit view' },
-    { key:'Shift+F',  desc:'Zoom to selection' },
-    { key:'G',        desc:'Toggle grid' },
-    { key:'M',        desc:'Toggle minimap' },
-    { key:'Ctrl+Z',   desc:'Undo' },
+    { key:'X',        desc:'Flip Horizontal (Cermin Kiri-Kanan)' },
+    { key:'Y',        desc:'Flip Vertical (Cermin Atas-Bawah)' },
+    { key:'Ctrl+A',   desc:'Pilih Semua Komponen' },
+    { key:'Del / BS', desc:'Hapus komponen atau kabel terpilih' },
+    { key:'F',        desc:'Fit view ke seluruh skema' },
+    { key:'Shift+F',  desc:'Zoom ke komponen terpilih' },
+    { key:'G',        desc:'Ganti mode grid (Dots / Lines / Off)' },
+    { key:'M',        desc:'Toggle minimap navigasi' },
+    { key:'Ctrl+Z',   desc:'Undo aksi terakhir' },
     { key:'Ctrl+Y',   desc:'Redo' },
-    { key:'Ctrl+D',   desc:'Duplicate' },
-    { key:'Esc',      desc:'Cancel / deselect' },
-    { key:'Arrows',   desc:'Nudge (Shift = fine)' },
-    { key:'Scroll',   desc:'Zoom in/out' },
-    { key:'Alt+Drag', desc:'Pan canvas' },
-    { key:'?',        desc:'This overlay' },
+    { key:'Ctrl+D',   desc:'Duplikasi komponen' },
+    { key:'Esc',      desc:'Batal / bersihkan seleksi' },
+    { key:'Panah',    desc:'Nudge geser komponen (Shift = halus)' },
+    { key:'Scroll',   desc:'Zoom in / out' },
+    { key:'Alt+Drag', desc:'Pan geser kanvas bebas' },
+    { key:'?',        desc:'Panduan shortcut ini' },
   ]
 
   // ── Keyboard (global) ─────────────────────────────────
@@ -307,7 +375,7 @@
       return
     }
 
-    // Feature #8: toggle shortcut overlay
+    // Toggle shortcut overlay
     if (e.key === '?') { showShortcuts = !showShortcuts; return }
     if (e.key === 'Escape') {
       showShortcuts = false
@@ -316,31 +384,65 @@
       showCodeGenModal = false
       showWokwiModal = false
       showQuickPalette = false
+      closeAllMenus()
     }
 
-    if (e.ctrlKey && e.key==='z') { undo(); return }
-    if (e.ctrlKey && e.key==='y') { redo(); return }
+    if (e.ctrlKey && (e.key==='z' || e.key==='Z')) { undo(); return }
+    if (e.ctrlKey && (e.key==='y' || e.key==='Y')) { redo(); return }
 
-    // Feature #10: Zoom to selection — Shift+F
+    // Ctrl+A: Select All
+    if (e.ctrlKey && (e.key==='a' || e.key==='A')) {
+      e.preventDefault()
+      selectAll()
+      return
+    }
+
+    // Zoom to selection — Shift+F
     if ((e.key==='F' || e.key==='f') && e.shiftKey) {
       canvasRef.zoomToSelection?.(); return
+    }
+
+    // X: Flip Horizontal
+    if ((e.key === 'x' || e.key === 'X') && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      doFlipX()
+      return
+    }
+
+    // Y: Flip Vertical
+    if ((e.key === 'y' || e.key === 'Y') && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      doFlipY()
+      return
+    }
+
+    // P: Place VCC port
+    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      placeVCC()
+      return
+    }
+
+    // G / Shift+G: Place GND or toggle grid
+    if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      if (e.shiftKey) {
+        placeGND()
+      } else {
+        canvasRef.toggleGrid?.()
+      }
+      return
     }
 
     // R / Shift+R: Rotate selected components
     if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.altKey) {
       e.preventDefault()
-      const deg = e.shiftKey ? -90 : 90
-      const ms = $multiSelection
-      if (ms.length > 1) {
-        rotateComponents(ms.filter(s => s.type === 'component').map(s => s.id), deg)
-      } else if ($selection?.type === 'component') {
-        rotateComponent($selection.id, deg)
-      }
+      doRotate(e.shiftKey ? -90 : 90)
       return
     }
 
     // Ctrl+D duplicate (single history snapshot)
-    if (e.ctrlKey && e.key==='d') {
+    if (e.ctrlKey && (e.key==='d' || e.key==='D')) {
       e.preventDefault()
       const ms = $multiSelection
       if (ms.length > 1) {
@@ -353,26 +455,14 @@
 
     // Delete selected
     if (e.key==='Delete' || e.key==='Backspace') {
-      const ms = $multiSelection
-      if (ms.length > 1) {
-        // BUG FIX #B1: batch delete — single history step
-        removeComponents(ms.filter(s => s.type==='component').map(s => s.id))
-        return
-      }
-      const s = $selection
-      if (!s) return
-      // BUG FIX #5: no manual pushHistory() — remove* functions call it internally
-      if (s.type==='component') removeComponent(s.id)
-      else if (s.type==='wire') removeWire(s.id)
-      else if (s.type==='label') removeLabel(s.id)
+      doDelete()
       return
     }
 
-    const MAP = { v:'select',V:'select',w:'wire',W:'wire',l:'label',L:'label' }
+    const MAP = { v:'select',V:'select',w:'wire',W:'wire',l:'label',L:'label',t:'label',T:'label' }
     if (MAP[e.key]) { setTool(MAP[e.key]); return }
     if (e.key==='Escape') { setTool('select'); return }
     if ((e.key==='f'||e.key==='F') && !e.shiftKey) canvasRef.fitView?.()
-    if (e.key==='g'||e.key==='G') canvasRef.toggleGrid?.()
     if (e.key==='m'||e.key==='M') canvasRef.toggleMinimap?.()
   }
 
@@ -433,29 +523,224 @@
   $: curTool = $activeTool
 </script>
 
-<svelte:window on:keydown={onKeyDown} on:click={closeMenus}/>
+<svelte:window on:keydown={onKeyDown} on:click={closeAllMenus}/>
 
 <div class="app" class:light-app={isLightMode}>
-  <!-- HEADER ─────────────────────────────────────────── -->
-  <header class="hdr">
-    <div class="hdr-l">
-      <!-- Toggle Left Sidebar Button -->
-      <button class="nav-toggle-btn" on:click={toggleLeftSidebar} title="Buka/Tutup Komponen" class:btn-active={showLeftSidebar}>
-        📦 <span class="nav-toggle-lbl">Komponen</span>
+  <!-- CAD HEADER: TIER 1 - EasyEDA MENU RIBBON ─────────────── -->
+  <header class="cad-header">
+    <div class="cad-ribbon-left">
+      <!-- Toggle Left Sidebar (EELib & Design Manager) -->
+      <button class="nav-toggle-btn" on:click={toggleLeftSidebar} title="Buka/Tutup EELib & Design Manager" class:btn-active={showLeftSidebar}>
+        📦 <span class="nav-toggle-lbl">EELib</span>
       </button>
 
       <div class="logo">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
           <rect x="2" y="5" width="7" height="14" rx="2" fill="#38bdf8" stroke="#0284c7" stroke-width="1.5"/>
           <rect x="15" y="5" width="7" height="14" rx="2" fill="#f97316" stroke="#ea580c" stroke-width="1.5"/>
           <path d="M9 8.5h6M9 12h6M9 15.5h6" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        <span class="logo-text">WireTool</span>
+        <span class="logo-text">EasyEDA</span>
       </div>
-      <span class="badge">v2.2</span>
+      <span class="cad-tag">SCH</span>
+
+      <!-- Ribbon Menus -->
+      <nav class="ribbon-menus">
+        <!-- File Menu -->
+        <div class="menu-item-wrap">
+          <button class="menu-tab-btn" class:menu-open={activeRibbon==='file'} on:click={(e) => toggleRibbon('file', e)}>
+            File ▾
+          </button>
+          {#if activeRibbon === 'file'}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="ribbon-dropdown" on:click|stopPropagation>
+              <button class="rdd-item" on:click={() => { handleClearDiagram(); activeRibbon = null }}>
+                <span class="rdd-icon">📄</span> New Schematic
+              </button>
+              <button class="rdd-item" on:click={() => { importJSON(); activeRibbon = null }}>
+                <span class="rdd-icon">📥</span> Open / Import JSON...
+              </button>
+              <button class="rdd-item" on:click={() => { exportJSON(); activeRibbon = null }}>
+                <span class="rdd-icon">💾</span> Save JSON Diagram
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item" on:click={() => { exportPNG(); activeRibbon = null }}>
+                <span class="rdd-icon">🖼</span> Export PNG (Image)
+              </button>
+              <button class="rdd-item" on:click={() => { exportSVG(); activeRibbon = null }}>
+                <span class="rdd-icon">📐</span> Export SVG (Vector)
+              </button>
+              <button class="rdd-item" on:click={() => { exportNetlist(); activeRibbon = null }}>
+                <span class="rdd-icon">🔌</span> Export Netlist (CSV)
+              </button>
+              <button class="rdd-item" on:click={() => { exportBOM(); activeRibbon = null }}>
+                <span class="rdd-icon">📋</span> Export BOM (CSV)
+              </button>
+              <button class="rdd-item" on:click={() => { showWokwiModal = true; activeRibbon = null }}>
+                <span class="rdd-icon">🚀</span> Wokwi Simulation JSON
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item rdd-danger" on:click={() => { handleClearDiagram(); activeRibbon = null }}>
+                <span class="rdd-icon">🗑️</span> Kosongkan Seluruh Diagram
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Edit Menu -->
+        <div class="menu-item-wrap">
+          <button class="menu-tab-btn" class:menu-open={activeRibbon==='edit'} on:click={(e) => toggleRibbon('edit', e)}>
+            Edit ▾
+          </button>
+          {#if activeRibbon === 'edit'}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="ribbon-dropdown" on:click|stopPropagation>
+              <button class="rdd-item" on:click={() => { undo(); activeRibbon = null }}>
+                <span class="rdd-icon">↩</span> Undo <span class="rdd-key">Ctrl+Z</span>
+              </button>
+              <button class="rdd-item" on:click={() => { redo(); activeRibbon = null }}>
+                <span class="rdd-icon">↪</span> Redo <span class="rdd-key">Ctrl+Y</span>
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item" on:click={() => { selectAll(); activeRibbon = null }}>
+                <span class="rdd-icon">⬚</span> Select All <span class="rdd-key">Ctrl+A</span>
+              </button>
+              <button class="rdd-item" on:click={() => { doRotate(90); activeRibbon = null }}>
+                <span class="rdd-icon">↻</span> Rotate 90° <span class="rdd-key">R</span>
+              </button>
+              <button class="rdd-item" on:click={() => { doFlipX(); activeRibbon = null }}>
+                <span class="rdd-icon">⇆</span> Flip Horizontal <span class="rdd-key">X</span>
+              </button>
+              <button class="rdd-item" on:click={() => { doFlipY(); activeRibbon = null }}>
+                <span class="rdd-icon">⇅</span> Flip Vertical <span class="rdd-key">Y</span>
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item rdd-danger" on:click={() => { doDelete(); activeRibbon = null }}>
+                <span class="rdd-icon">🗑️</span> Delete <span class="rdd-key">Del</span>
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Place Menu -->
+        <div class="menu-item-wrap">
+          <button class="menu-tab-btn" class:menu-open={activeRibbon==='place'} on:click={(e) => toggleRibbon('place', e)}>
+            Place ▾
+          </button>
+          {#if activeRibbon === 'place'}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="ribbon-dropdown" on:click|stopPropagation>
+              <button class="rdd-item" on:click={() => { setTool('wire'); activeRibbon = null }}>
+                <span class="rdd-icon">⚡</span> Wire <span class="rdd-key">W</span>
+              </button>
+              <button class="rdd-item" on:click={() => { placeGND(); activeRibbon = null }}>
+                <span class="rdd-icon">⏚</span> Net Port GND <span class="rdd-key">Shift+G</span>
+              </button>
+              <button class="rdd-item" on:click={() => { placeVCC('vcc-flag'); activeRibbon = null }}>
+                <span class="rdd-icon">▲</span> Net Port VCC (+5V) <span class="rdd-key">P</span>
+              </button>
+              <button class="rdd-item" on:click={() => { placeVCC('v33-flag'); activeRibbon = null }}>
+                <span class="rdd-icon">▲</span> Net Port +3.3V
+              </button>
+              <button class="rdd-item" on:click={() => { placeVCC('v12-flag'); activeRibbon = null }}>
+                <span class="rdd-icon">▲</span> Net Port +12V
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item" on:click={() => { setTool('label'); activeRibbon = null }}>
+                <span class="rdd-icon">T</span> Text / Net Label <span class="rdd-key">T</span>
+              </button>
+              <button class="rdd-item" on:click={() => { showQuickPalette = true; activeRibbon = null }}>
+                <span class="rdd-icon">🔍</span> Cari Komponen (EELib) <span class="rdd-key">Ctrl+K</span>
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- View Menu -->
+        <div class="menu-item-wrap">
+          <button class="menu-tab-btn" class:menu-open={activeRibbon==='view'} on:click={(e) => toggleRibbon('view', e)}>
+            View ▾
+          </button>
+          {#if activeRibbon === 'view'}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="ribbon-dropdown" on:click|stopPropagation>
+              <button class="rdd-item" on:click={() => { canvasRef.fitView?.(); activeRibbon = null }}>
+                <span class="rdd-icon">⊡</span> Fit View <span class="rdd-key">F</span>
+              </button>
+              <button class="rdd-item" on:click={() => { canvasRef.zoomToSelection?.(); activeRibbon = null }}>
+                <span class="rdd-icon">🔍</span> Zoom to Selection <span class="rdd-key">Shift+F</span>
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item" on:click={() => { canvasRef.toggleGrid?.(); activeRibbon = null }}>
+                <span class="rdd-icon">∷</span> Grid Mode: <strong>{$edaGridType.toUpperCase()}</strong> <span class="rdd-key">G</span>
+              </button>
+              <button class="rdd-item" on:click={() => { canvasRef.toggleSheet?.(); activeRibbon = null }}>
+                <span class="rdd-icon">📄</span> Drawing Sheet Frame: <strong>{$showDrawingSheet ? 'ON' : 'OFF'}</strong>
+              </button>
+              <button class="rdd-item" on:click={() => { canvasRef.toggleMinimap?.(); activeRibbon = null }}>
+                <span class="rdd-icon">🗺</span> Minimap <span class="rdd-key">M</span>
+              </button>
+              <div class="rdd-divider"></div>
+              <button class="rdd-item" on:click={() => { toggleTheme(); activeRibbon = null }}>
+                <span class="rdd-icon">{isLightMode ? '☀️' : '🌙'}</span> Mode Tema: <strong>{isLightMode ? 'Light' : 'Dark'}</strong>
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Design Menu -->
+        <div class="menu-item-wrap">
+          <button class="menu-tab-btn" class:menu-open={activeRibbon==='design'} on:click={(e) => toggleRibbon('design', e)}>
+            Design ▾
+          </button>
+          {#if activeRibbon === 'design'}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="ribbon-dropdown" on:click|stopPropagation>
+              <button class="rdd-item" on:click={() => { showLeftSidebar = true; activeRibbon = null }}>
+                <span class="rdd-icon">🌲</span> Design Manager (Parts & Nets)
+              </button>
+              <button class="rdd-item" on:click={() => { showERCModal = true; activeRibbon = null }}>
+                <span class="rdd-icon">⚡</span> Run Electrical Rules Check (ERC)
+              </button>
+              <button class="rdd-item" on:click={() => { showCodeGenModal = true; activeRibbon = null }}>
+                <span class="rdd-icon">💻</span> Generate Firmware Pin Code
+              </button>
+              <button class="rdd-item" on:click={() => { showStats = true; activeRibbon = null }}>
+                <span class="rdd-icon">📊</span> Diagram Statistics
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Help Menu -->
+        <div class="menu-item-wrap">
+          <button class="menu-tab-btn" class:menu-open={activeRibbon==='help'} on:click={(e) => toggleRibbon('help', e)}>
+            Help ▾
+          </button>
+          {#if activeRibbon === 'help'}
+            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <div class="ribbon-dropdown" on:click|stopPropagation>
+              <button class="rdd-item" on:click={() => { showShortcuts = true; activeRibbon = null }}>
+                <span class="rdd-icon">⌨</span> Keyboard Shortcuts <span class="rdd-key">?</span>
+              </button>
+              <button class="rdd-item" on:click={() => {
+                showAlert({
+                  title: 'EasyEDA Web Schematic',
+                  message: 'Aplikasi schematic CAD berbasis web yang dilengkapi dengan Dot Grid, Drawing Sheet CAD, EELib, Design Manager (Net & Part inspector), rotasi & flip komponen, serta export Netlist & BOM.',
+                  icon: '✨'
+                });
+                activeRibbon = null;
+              }}>
+                <span class="rdd-icon">ℹ️</span> Tentang Mode EasyEDA
+              </button>
+            </div>
+          {/if}
+        </div>
+      </nav>
     </div>
 
-    <div class="hdr-c">
+    <!-- Center: Project Title -->
+    <div class="cad-ribbon-center">
       <!-- svelte-ignore a11y-interactive-supports-focus -->
       <span
         class="proj-name"
@@ -468,7 +753,8 @@
       >{projectName}</span>
     </div>
 
-    <div class="hdr-r">
+    <!-- Right: Status, Code, Export, Properties -->
+    <div class="cad-ribbon-right">
       <!-- Search Palette -->
       <button class="btn btn-search" on:click={() => showQuickPalette = true} title="Cari Komponen Cepat (Ctrl+K atau /)">
         🔍 <span class="shortcut-tag">Ctrl+K</span>
@@ -490,49 +776,6 @@
       <button class="btn btn-code" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
         💻 <span class="btn-text">Code</span>
       </button>
-
-      <!-- File Dropdown -->
-      <div class="dropdown-wrap">
-        <button class="btn btn-secondary-icon btn-file" on:click={toggleFileMenu} title="Menu Berkas & Pengaturan Proyek">
-          📁 <span class="btn-text">File</span> <span class="arrow-down">▾</span>
-        </button>
-
-        {#if showFileMenu}
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="export-dropdown file-dropdown" on:click|stopPropagation>
-            <div class="dd-title">Menu Proyek</div>
-            <button class="dd-item" on:click={() => { importJSON(); showFileMenu = false }}>
-              <span class="dd-icon">📥</span>
-              <div class="dd-info">
-                <span class="dd-label">Buka / Import JSON</span>
-                <span class="dd-desc">Muat diagram dari file komputer</span>
-              </div>
-            </button>
-            <button class="dd-item" on:click={() => { showStats = true; showFileMenu = false }}>
-              <span class="dd-icon">📊</span>
-              <div class="dd-info">
-                <span class="dd-label">Statistik Diagram</span>
-                <span class="dd-desc">Rincian pin, kabel, dan modul</span>
-              </div>
-            </button>
-            <button class="dd-item" on:click={() => { showShortcuts = true; showFileMenu = false }}>
-              <span class="dd-icon">⌨</span>
-              <div class="dd-info">
-                <span class="dd-label">Keyboard Shortcuts</span>
-                <span class="dd-desc">Daftar tombol pintasan cepat</span>
-              </div>
-            </button>
-            <div class="dd-divider"></div>
-            <button class="dd-item dd-danger" on:click={() => { handleClearDiagram(); showFileMenu = false }}>
-              <span class="dd-icon">🗑️</span>
-              <div class="dd-info">
-                <span class="dd-label">Kosongkan Diagram</span>
-                <span class="dd-desc">Hapus seluruh isi kanvas saat ini</span>
-              </div>
-            </button>
-          </div>
-        {/if}
-      </div>
 
       <!-- Export Dropdown -->
       <div class="dropdown-wrap">
@@ -601,24 +844,24 @@
   </header>
 
   <div class="body">
-    <!-- LEFT SIDEBAR (COMPONENTS) -->
+    <!-- LEFT SIDEBAR (EELib & DESIGN MANAGER) -->
     {#if showLeftSidebar}
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <div class="drawer-backdrop left-bd" on:click={() => showLeftSidebar = false}></div>
       <div class="sidebar-wrapper left-wrap">
         <div class="mobile-sidebar-head">
-          <span>📦 Library Komponen</span>
+          <span>📦 Library & Manager</span>
           <button class="drawer-close-btn" on:click={() => showLeftSidebar = false}>✕</button>
         </div>
-        <Sidebar onDrop={handleDrop}/>
+        <Sidebar onDrop={handleDrop} onFocusComp={(id) => canvasRef.panToComponent?.(id)}/>
       </div>
     {/if}
 
     <!-- CANVAS COLUMN ───────────────────────────────── -->
     <div class="canvas-col">
-      <!-- TOOLBAR -->
-      <div class="toolbar">
-        <!-- Tools Segment -->
+      <!-- TIER 2: CAD ACTION TOOLSTRIP -->
+      <div class="toolbar cad-action-strip">
+        <!-- Tools & Net Ports Segment -->
         <div class="tg tool-group">
           {#each TOOLS as t}
             <button class="tbtn" class:active={curTool===t.id}
@@ -627,6 +870,16 @@
               <span class="tbtn-txt">{t.label}</span>
             </button>
           {/each}
+          <div class="tg-sep"></div>
+          <!-- Quick Place Net Ports (Iconic EasyEDA features!) -->
+          <button class="tbtn flag-btn" on:click={placeGND} title="Pasang Ground Port (⏚ GND) [Shift+G]">
+            <span class="tbtn-icon">⏚</span>
+            <span class="tbtn-txt">GND</span>
+          </button>
+          <button class="tbtn flag-btn" on:click={() => placeVCC('vcc-flag')} title="Pasang Power Port (▲ +5V) [P]">
+            <span class="tbtn-icon">▲</span>
+            <span class="tbtn-txt">VCC</span>
+          </button>
         </div>
 
         <!-- Routing Mode Toggle -->
@@ -675,9 +928,27 @@
           {/if}
         </div>
 
-        <!-- Canvas View Controls -->
+        <!-- Orientation & Transforms Group (Rotate & Flip) -->
+        <div class="tg transform-tg">
+          <button class="tbtn" on:click={() => doRotate(90)} title="Putar Komponen 90° (R)">
+            <span>↻</span> <span class="tbtn-txt">Rotate</span>
+          </button>
+          <button class="tbtn" on:click={doFlipX} title="Flip Horizontal (Cermin Kiri-Kanan) [X]">
+            <span>⇆</span> <span class="tbtn-txt">Flip X</span>
+          </button>
+          <button class="tbtn" on:click={doFlipY} title="Flip Vertical (Cermin Atas-Bawah) [Y]">
+            <span>⇅</span> <span class="tbtn-txt">Flip Y</span>
+          </button>
+        </div>
+
+        <!-- Canvas View Controls (Grid & Sheet) -->
         <div class="tg toggles-group">
-          <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()} title="Tampilkan/Sembunyikan Grid (G)">⊞ Grid</button>
+          <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()} title="Ganti Mode Grid (Dots / Lines / Off) [G]">
+            <span>∷</span> <span class="tbtn-txt">{$edaGridType.toUpperCase()}</span>
+          </button>
+          <button class="tbtn" class:active={$showDrawingSheet} on:click={() => canvasRef.toggleSheet?.()} title="Tampilkan/Sembunyikan Bingkai Drawing Sheet CAD">
+            <span>📄</span> <span class="tbtn-txt">Sheet</span>
+          </button>
           <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Tampilkan/Sembunyikan Minimap (M)">🗺</button>
           <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema (Light / Dark)">
             <span>{isLightMode ? '☀️' : '🌙'}</span>
@@ -697,7 +968,7 @@
       </div>
 
       <!-- CANVAS -->
-      <Canvas bind:api={canvasRef} {isLightMode}/>
+      <Canvas bind:api={canvasRef} {isLightMode} {projectName}/>
     </div>
 
     <!-- RIGHT SIDEBAR (PROPERTIES & TEMPLATES) ──────── -->
@@ -819,18 +1090,43 @@
 
   .app{ display:flex; flex-direction:column; height:100vh; overflow:hidden; background:#0b0f19; }
 
-  /* ── Header ── */
-  .hdr{ height:52px; background:#0f172a; border-bottom:1px solid #1e293b;
-    display:flex; align-items:center; padding:0 12px; gap:8px;
-    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:40; }
-  .hdr-l{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
-  .hdr-c{ flex:1; display:flex; justify-content:center; min-width:0; }
-  .hdr-r{ display:flex; align-items:center; gap:6px; justify-content:flex-end; flex-shrink:0; }
+  /* ── EasyEDA CAD Header & Ribbon ── */
+  .cad-header{ height:48px; background:#0f172a; border-bottom:1px solid #1e293b;
+    display:flex; align-items:center; padding:0 10px; gap:8px;
+    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:40; justify-content:space-between; }
+  .cad-ribbon-left{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .cad-ribbon-center{ flex:1; display:flex; justify-content:center; min-width:0; }
+  .cad-ribbon-right{ display:flex; align-items:center; gap:6px; justify-content:flex-end; flex-shrink:0; }
 
+  .cad-tag{ background:#0284c7; color:#fff; font-size:9px; font-weight:800; padding:2px 6px;
+    border-radius:3px; font-family:monospace; letter-spacing:0.5px; }
+
+  .ribbon-menus{ display:flex; align-items:center; gap:2px; margin-left:6px; }
+  .menu-item-wrap{ position:relative; }
+  .menu-tab-btn{ background:transparent; border:1px solid transparent; border-radius:4px;
+    color:#cbd5e1; font-size:11.5px; font-weight:600; padding:5px 8px; cursor:pointer; transition:all .12s; }
+  .menu-tab-btn:hover, .menu-tab-btn.menu-open{ background:#1e293b; color:#38bdf8; border-color:#334155; }
+
+  .ribbon-dropdown{ position:absolute; top:calc(100% + 4px); left:0; width:230px;
+    background:#0f172a; border:1px solid #334155; border-radius:7px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.7); padding:5px; z-index:1000;
+    display:flex; flex-direction:column; gap:2px; animation:pop-down .12s ease-out; }
+  .rdd-item{ display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:4px;
+    border:none; background:transparent; color:#f1f5f9; font-size:11.5px; text-align:left; cursor:pointer;
+    transition:background .1s; width:100%; }
+  .rdd-item:hover{ background:#1e293b; color:#38bdf8; }
+  .rdd-icon{ font-size:13px; width:18px; text-align:center; flex-shrink:0; }
+  .rdd-key{ margin-left:auto; font-size:10px; color:#64748b; font-family:monospace; }
+  .rdd-divider{ height:1px; background:#1e293b; margin:3px 0; }
+  .rdd-danger:hover{ background:rgba(239,68,68,0.15); color:#f87171; }
+
+  .flag-btn{ background:rgba(56,189,248,0.08); border-color:rgba(56,189,248,0.25); color:#38bdf8; }
+  .flag-btn:hover{ background:#0284c7; color:#fff; border-color:#0284c7; }
+  .transform-tg{ display:flex; align-items:center; gap:2px; }
+
+  /* ── Brand Logo & Text ── */
   .logo{ display:flex; align-items:center; gap:7px; font-weight:800; font-size:15px; color:#38bdf8; }
   .logo-text{ letter-spacing:-0.3px; }
-  .badge{ background:#1e293b; color:#94a3b8; font-size:10px; font-weight:600;
-    padding:2px 7px; border-radius:10px; border:1px solid #334155; }
 
   .proj-name{ font-size:14px; font-weight:600; color:#f8fafc; outline:none;
     padding:4px 10px; border-radius:6px; border:1px solid transparent;
@@ -866,7 +1162,6 @@
   .badge-erc-ok{ background:rgba(74,222,128,0.15); color:#4ade80; border:1px solid #4ade80; }
 
   .btn-code{ background:#1e293b; }
-  .btn-secondary-icon{ padding:6px 9px; }
   .flash{ font-size:12px; color:#4ade80; font-weight:600; animation:fade-in .15s; }
 
   /* ── Export Dropdown ── */
@@ -888,9 +1183,6 @@
   .dd-label{ font-size:11.5px; font-weight:600; color:#e2e8f0; }
   .dd-desc{ font-size:10px; color:#94a3b8; }
   .dd-divider{ height:1px; background:#1e293b; margin:4px 0; }
-  .dd-item.dd-danger:hover{ background:rgba(239,68,68,0.15); }
-  .dd-item.dd-danger:hover .dd-label{ color:#f87171; }
-  .file-dropdown{ right:0; width:220px; }
 
   /* ── Body ── */
   .body{ display:flex; flex:1; overflow:hidden; position:relative; }
@@ -1009,9 +1301,16 @@
 
   /* ── LIGHT MODE OVERRIDES ── */
   .app.light-app { background: #f8fafc; color: #0f172a; }
-  .app.light-app .hdr { background: #ffffff; border-bottom-color: #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .app.light-app .cad-header { background: #ffffff; border-bottom-color: #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .app.light-app .menu-tab-btn { color: #334155; }
+  .app.light-app .menu-tab-btn:hover, .app.light-app .menu-tab-btn.menu-open { background: #f1f5f9; color: #0284c7; border-color: #cbd5e1; }
+  .app.light-app .ribbon-dropdown { background: #ffffff; border-color: #cbd5e1; box-shadow: 0 12px 32px rgba(0,0,0,0.12); }
+  .app.light-app .rdd-item { color: #0f172a; }
+  .app.light-app .rdd-item:hover { background: #f0f9ff; color: #0284c7; }
+  .app.light-app .rdd-divider { background: #e2e8f0; }
+  .app.light-app .rdd-key { color: #94a3b8; }
+  .app.light-app .flag-btn { background: #e0f2fe; border-color: #bae6fd; color: #0284c7; }
   .app.light-app .logo { color: #0284c7; }
-  .app.light-app .badge { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
   .app.light-app .proj-name { color: #0f172a; }
   .app.light-app .proj-name:hover { background: #f1f5f9; border-color: #cbd5e1; }
   .app.light-app .proj-name:focus { background: #fff; border-color: #0284c7; }
@@ -1077,10 +1376,10 @@
   }
 
   @media (max-width: 768px) {
-    .hdr { padding: 0 8px; gap: 6px; }
+    .cad-header { padding: 0 8px; gap: 6px; }
     .proj-name { max-width: 140px; font-size: 13px; }
     .nav-toggle-lbl, .btn-text { display: none; }
-    .badge { display: none; }
+    .ribbon-menus { display: none; }
     .tbtn-txt, .col-lbl-name { display: none; }
   }
 
