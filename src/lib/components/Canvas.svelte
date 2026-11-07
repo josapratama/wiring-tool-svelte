@@ -23,6 +23,7 @@
   import { findCompDef }                     from '$lib/data/components-db.js'
   import { pinPos, snap, nearestPin, allPinPositions } from '$lib/engine/geometry.js'
   import { findCompatiblePins }              from '$lib/engine/erc.js'
+  import { showAlert, showConfirm, showPrompt } from '../store/dialog.js'
 
   // ── Public API exposed to parent via bind:api ─────────
   // Parent does: <Canvas bind:api={canvasRef}/>
@@ -432,12 +433,30 @@
       duplicateComponent(t.instanceId)
     }
     if (action === 'rename' && t?.instanceId) {
-      const newLabel = prompt('Rename component:', t.label)
-      if (newLabel !== null) updateComponent(t.instanceId, { label: newLabel })
+      showPrompt({
+        title: 'Ubah Nama Komponen',
+        message: 'Masukkan nama atau label baru untuk komponen ini:',
+        defaultValue: t.label || '',
+        placeholder: 'Nama komponen...',
+        icon: '🏷️'
+      }).then(newLabel => {
+        if (newLabel !== null && newLabel.trim()) {
+          updateComponent(t.instanceId, { label: newLabel.trim() })
+        }
+      })
     }
     if (action === 'editLabel' && t?.id) {
-      const newLabel = prompt('Wire label:', t.label ?? '')
-      if (newLabel !== null) updateWire(t.id, { label: newLabel })
+      showPrompt({
+        title: 'Label Kabel',
+        message: 'Masukkan teks label penjelas pada kabel ini:',
+        defaultValue: t.label ?? '',
+        placeholder: 'Contoh: I2C_SDA, 5V_MAIN...',
+        icon: '🏷️'
+      }).then(newLabel => {
+        if (newLabel !== null) {
+          updateWire(t.id, { label: newLabel.trim() })
+        }
+      })
     }
     if (action === 'fitView')    fitView()
     if (action === 'toggleGrid') toggleGrid()
@@ -447,8 +466,24 @@
     }
     if (action === 'connections' && t?.instanceId) {
       const conns = $wires.filter(w => w.fromComp===t.instanceId||w.toComp===t.instanceId)
-      alert(`${conns.length} connection(s):\n` +
-        conns.map(w=>`  ${w.fromPin} → ${w.toPin} (${w.label||'no label'})`).join('\n'))
+      if (conns.length === 0) {
+        showAlert({
+          title: 'Daftar Koneksi',
+          message: 'Komponen ini belum memiliki kabel atau koneksi terhubung.',
+          icon: '🔌'
+        })
+      } else {
+        const lines = conns.map(w => {
+          const fromName = $components.find(c => c.instanceId === w.fromComp)?.label ?? w.fromComp
+          const toName = $components.find(c => c.instanceId === w.toComp)?.label ?? w.toComp
+          return `• ${fromName}:${w.fromPin} ──▶ ${toName}:${w.toPin} [${w.label || w.color}]`
+        }).join('\n')
+        showAlert({
+          title: `Daftar Koneksi (${conns.length})`,
+          message: lines,
+          icon: '🔌'
+        })
+      }
     }
     // BUG FIX #2: handle wireColor action
     if (action === 'wireColor' && t?.id) {

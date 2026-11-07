@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { CATEGORIES, getCustomComponents, deleteCustomComponent } from '$lib/data/components-db.js'
   import CustomComponentModal from './CustomComponentModal.svelte'
+  import { showConfirm } from '../store/dialog.js'
 
   export let onDrop  // callback(compId, clientX, clientY)
 
@@ -37,9 +38,17 @@
     e.dataTransfer.effectAllowed = 'copy'
   }
 
-  function handleDeleteCustom(e, id) {
+  async function handleDeleteCustom(e, id) {
     e.stopPropagation()
-    if (confirm('Hapus komponen kustom ini dari library?')) {
+    const ok = await showConfirm({
+      title: 'Hapus Komponen Kustom?',
+      message: 'Komponen kustom ini akan dihapus dari library lokal browser Anda.',
+      confirmText: 'Ya, Hapus',
+      cancelText: 'Batal',
+      danger: true,
+      icon: '🗑️'
+    })
+    if (ok) {
       customComponents = deleteCustomComponent(id)
     }
   }

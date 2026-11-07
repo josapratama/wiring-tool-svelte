@@ -6,6 +6,8 @@
   import CodeGenModal    from '$lib/components/CodeGenModal.svelte'
   import WokwiModal      from '$lib/components/WokwiModal.svelte'
   import QuickPaletteModal from '$lib/components/QuickPaletteModal.svelte'
+  import DialogModal     from '$lib/components/DialogModal.svelte'
+  import { showAlert, showConfirm, showPrompt } from '$lib/store/dialog.js'
 
   import { TEMPLATES }   from '$lib/store/templates.js'
   import {
@@ -89,7 +91,13 @@
         loadDiagram(d)
         setTimeout(() => canvasRef.fitView?.(), 120)
         flash('Imported ✓')
-      } catch { alert('Invalid JSON file') }
+      } catch {
+        showAlert({
+          title: 'Format Tidak Valid',
+          message: 'File JSON diagram tidak dapat dibaca atau formatnya rusak.',
+          icon: '⚠️'
+        })
+      }
     })
   }
 
@@ -203,11 +211,19 @@
   }
 
   // ── Templates ─────────────────────────────────────────
-  function loadTemplate(key) {
+  async function loadTemplate(key) {
     const t = TEMPLATES[key]; if (!t) return
-    // BUG FIX: confirm before overwriting unsaved work
     const cs = $compsStore
-    if (cs.length > 0 && !confirm(`Load template "${t.label}"?\nThis will replace the current diagram.`)) return
+    if (cs.length > 0) {
+      const ok = await showConfirm({
+        title: 'Muat Template Baru?',
+        message: `Buka template "${t.label}"?\nDiagram kerja saat ini akan digantikan.`,
+        confirmText: 'Muat Template',
+        cancelText: 'Batal',
+        icon: '📋'
+      })
+      if (!ok) return
+    }
     loadDiagram({ components:t.components, wires:t.wires, labels:[] })
     projectName = t.label
     setTimeout(() => canvasRef.fitView?.(), 150)
@@ -346,7 +362,7 @@
   function handleDrop(compId, cx, cy) { canvasRef.handleDrop?.(compId, cx, cy) }
 
   // ── Feature #9: Auto-save restore on mount ────────────
-  onMount(() => {
+  onMount(async () => {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       showLeftSidebar = false
       showRightSidebar = false
@@ -359,7 +375,13 @@
 
     const saved = getAutoSave()
     if (saved && saved.components?.length) {
-      const ok = confirm(`Auto-saved diagram found (${saved.components.length} components, ${saved.wires?.length ?? 0} wires).\nRestore it?`)
+      const ok = await showConfirm({
+        title: 'Pulihkan Diagram Otomatis?',
+        message: `Ditemukan diagram tersimpan otomatis (${saved.components.length} komponen, ${saved.wires?.length ?? 0} kabel).\nApakah Anda ingin memulihkan diagram sesi terakhir ini?`,
+        confirmText: 'Pulihkan Diagram',
+        cancelText: 'Abaikan (Mulai Baru)',
+        icon: '💾'
+      })
       if (ok) {
         if (saved.project) projectName = saved.project
         loadDiagram(saved)
@@ -374,6 +396,22 @@
     initAutoSave()        // BUG FIX: enable auto-save only after this point
     loadTemplate('esp32s3-fi')
   })
+
+  async function handleClearDiagram() {
+    const ok = await showConfirm({
+      title: 'Kosongkan Seluruh Diagram?',
+      message: 'Semua komponen dan kabel di kanvas saat ini akan dihapus bersih.',
+      confirmText: 'Ya, Kosongkan',
+      cancelText: 'Batal',
+      danger: true,
+      icon: '🗑️'
+    })
+    if (ok) {
+      pushHistory()
+      clearDiagram()
+      flash('Diagram dikosongkan ✓')
+    }
+  }
 
   $: curTool = $activeTool
 </script>
@@ -496,7 +534,7 @@
       <button class="btn btn-secondary-icon" on:click={importJSON} title="Import Diagram JSON">↑ <span class="btn-text">Import</span></button>
       <button class="btn btn-secondary-icon" on:click={() => showStats = !showStats} title="Diagram Stats">📊</button>
       <button class="btn btn-secondary-icon" on:click={() => showShortcuts = !showShortcuts} title="Shortcuts (?)">⌨</button>
-      <button class="btn btn-secondary-icon btn-clear" on:click={() => { if(confirm('Clear diagram?')){ pushHistory(); clearDiagram() } }} title="Clear Diagram">🗑</button>
+      <button class="btn btn-secondary-icon btn-clear" on:click={handleClearDiagram} title="Clear Diagram">🗑</button>
 
       <!-- Toggle Right Inspector Button -->
       <button class="nav-toggle-btn" on:click={toggleRightSidebar} title="Buka/Tutup Panel Properties" class:btn-active={showRightSidebar}>
@@ -682,6 +720,9 @@
     canvasCenter={canvasRef.getViewCenter?.() || { x: 400, y: 300 }}
     on:added={() => flash('Komponen ditambahkan ke kanvas ✓')}
   />
+
+  <!-- Global Sleek Dialog & Confirmation Modal (Replaces browser alert/confirm/prompt) -->
+  <DialogModal />
 </div>
 
 <style>

@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte'
   import { saveCustomComponent } from '$lib/data/components-db.js'
+  import { showAlert } from '../store/dialog.js'
 
   export let show = false
 
@@ -41,7 +42,11 @@
   function handleSave() {
     const trimmed = name.trim()
     if (!trimmed) {
-      alert('Masukkan nama komponen.')
+      showAlert({
+        title: 'Nama Komponen Kosong',
+        message: 'Silakan masukkan nama komponen kustom terlebih dahulu.',
+        icon: '⚠️'
+      })
       return
     }
     const id = 'custom-' + trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-')
