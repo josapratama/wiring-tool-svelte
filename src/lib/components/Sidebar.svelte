@@ -248,4 +248,61 @@
     cursor: pointer; font-size: 10px; padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
   }
   .btn-del-mini:hover { color: #f87171; background: #371717; }
+
+  /* ── Light Mode Integration ── */
+  :global(.light-app) .sidebar {
+    background: #f8fafc;
+    border-right-color: #e2e8f0;
+  }
+  :global(.light-app) .sidebar-head {
+    background: #ffffff;
+    border-bottom-color: #e2e8f0;
+  }
+  :global(.light-app) .sidebar-title {
+    color: #0284c7;
+  }
+  :global(.light-app) .search {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #0f172a;
+  }
+  :global(.light-app) .search::placeholder {
+    color: #94a3b8;
+  }
+  :global(.light-app) .cat-header {
+    color: #475569;
+  }
+  :global(.light-app) .cat-header:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  :global(.light-app) .comp-item {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  :global(.light-app) .comp-item:hover {
+    background: #f0f9ff;
+    border-color: #38bdf8;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.12);
+  }
+  :global(.light-app) .comp-name {
+    color: #0f172a;
+  }
+  :global(.light-app) .comp-desc {
+    color: #64748b;
+  }
+  :global(.light-app) .btn-add-mini {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0284c7;
+  }
+  :global(.light-app) .btn-add-mini:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+  }
+  :global(.light-app) .library::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+  }
 </style>

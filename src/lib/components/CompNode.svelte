@@ -22,19 +22,31 @@
 
   const dispatch = createEventDispatcher()
 
-  const THEMES = {
-    mcu:     { body:'#0a1628', title:'#1a3a6a', border:'#4f9cf9' },
-    sensor:  { body:'#091a0e', title:'#123520', border:'#4ade80' },
-    power:   { body:'#1a0808', title:'#4a1010', border:'#f87171' },
-    display: { body:'#100820', title:'#2a1558', border:'#a78bfa' },
-    passive: { body:'#0e0e1e', title:'#1c1c38', border:'#94a3b8' },
-    switch:  { body:'#131205', title:'#353005', border:'#facc15' },
-    comms:   { body:'#041320', title:'#082640', border:'#60a5fa' },
-    output:  { body:'#180c04', title:'#381808', border:'#f97316' },
+  const THEMES_DARK = {
+    mcu:     { body:'#0a1628', title:'#1a3a6a', border:'#4f9cf9', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    sensor:  { body:'#091a0e', title:'#123520', border:'#4ade80', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    power:   { body:'#1a0808', title:'#4a1010', border:'#f87171', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    display: { body:'#100820', title:'#2a1558', border:'#a78bfa', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    passive: { body:'#0e0e1e', title:'#1c1c38', border:'#94a3b8', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    switch:  { body:'#131205', title:'#353005', border:'#facc15', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    comms:   { body:'#041320', title:'#082640', border:'#60a5fa', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
+    output:  { body:'#180c04', title:'#381808', border:'#f97316', text:'#ffffff', subtext:'rgba(255,255,255,0.6)', pinLabel:'#dde2f0', pinNum:'#64748b' },
   }
+
+  const THEMES_LIGHT = {
+    mcu:     { body:'#f0f7ff', title:'#dbeafe', border:'#3b82f6', text:'#1e3a8a', subtext:'#2563eb', pinLabel:'#0f172a', pinNum:'#475569' },
+    sensor:  { body:'#f0fdf4', title:'#dcfce7', border:'#22c55e', text:'#14532d', subtext:'#16a34a', pinLabel:'#0f172a', pinNum:'#475569' },
+    power:   { body:'#fef2f2', title:'#fee2e2', border:'#ef4444', text:'#7f1d1d', subtext:'#dc2626', pinLabel:'#0f172a', pinNum:'#475569' },
+    display: { body:'#faf5ff', title:'#f3e8ff', border:'#a855f7', text:'#581c87', subtext:'#9333ea', pinLabel:'#0f172a', pinNum:'#475569' },
+    passive: { body:'#f8fafc', title:'#f1f5f9', border:'#64748b', text:'#1e293b', subtext:'#475569', pinLabel:'#0f172a', pinNum:'#475569' },
+    switch:  { body:'#fefce8', title:'#fef9c3', border:'#eab308', text:'#713f12', subtext:'#ca8a04', pinLabel:'#0f172a', pinNum:'#475569' },
+    comms:   { body:'#eff6ff', title:'#dbeafe', border:'#60a5fa', text:'#1e3a8a', subtext:'#2563eb', pinLabel:'#0f172a', pinNum:'#475569' },
+    output:  { body:'#fff7ed', title:'#ffedd5', border:'#f97316', text:'#7c2d12', subtext:'#ea580c', pinLabel:'#0f172a', pinNum:'#475569' },
+  }
+
   $: theme = isLightMode
-    ? { body: '#ffffff', title: '#f1f5f9', border: '#475569' }
-    : (THEMES[comp.theme] ?? THEMES.passive)
+    ? (THEMES_LIGHT[comp.theme] ?? THEMES_LIGHT.passive)
+    : (THEMES_DARK[comp.theme] ?? THEMES_DARK.passive)
 
   // BUG FIX #2: unified spacing from geometry.js
   $: mcuData   = comp.isMCU ? (MCU_PINS[comp.id] ?? null) : null
@@ -255,11 +267,11 @@
     rx="5" ry="5" fill={theme.title}/>
 
   <!-- Label -->
-  <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" fill={isLightMode ? '#0f172a' : '#ffffff'}
+  <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" fill={theme.text}
     dominant-baseline="central" text-anchor="middle">{comp.label}</text>
 
   <!-- Sub-label -->
-  <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" fill={isLightMode ? '#64748b' : 'rgba(255,255,255,0.4)'}
+  <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" fill={theme.subtext}
     text-anchor="middle">{comp.id}</text>
 
   <!-- Divider -->
@@ -299,8 +311,8 @@
         <path d={ps.path} fill="#1a0808" stroke={col} stroke-width="1.2" pointer-events="none"/>
         <text x={ps.tx} y={ps.ty} text-anchor={ps.anchor} class="pwr-label" fill={col}>{netName}</text>
       {:else}
-        <text x={-PIN_R - 3} y={py + 4} class="pin-num" text-anchor="end">{pin.num}</text>
-        <text x={PIN_R + 10} y={py + 4} class="pin-label">{pin.label}</text>
+        <text x={-PIN_R - 3} y={py + 4} class="pin-num" text-anchor="end" fill={theme.pinNum}>{pin.num}</text>
+        <text x={PIN_R + 10} y={py + 4} class="pin-label" fill={theme.pinLabel}>{pin.label}</text>
       {/if}
       <circle cx={comp.width * 0.48} cy={py} r="2.5" fill={col} opacity="0.35" pointer-events="none"/>
     {/each}
@@ -335,8 +347,8 @@
         <path d={ps.path} fill="#1a0808" stroke={col} stroke-width="1.2" pointer-events="none"/>
         <text x={ps.tx} y={ps.ty} text-anchor={ps.anchor} class="pwr-label" fill={col}>{netName}</text>
       {:else}
-        <text x={comp.width + PIN_R + 3} y={py + 4} class="pin-num">{pin.num}</text>
-        <text x={comp.width - PIN_R - 10} y={py + 4} class="pin-label" text-anchor="end">{pin.label}</text>
+        <text x={comp.width + PIN_R + 3} y={py + 4} class="pin-num" fill={theme.pinNum}>{pin.num}</text>
+        <text x={comp.width - PIN_R - 10} y={py + 4} class="pin-label" text-anchor="end" fill={theme.pinLabel}>{pin.label}</text>
       {/if}
       <circle cx={comp.width * 0.52} cy={py} r="2.5" fill={col} opacity="0.35" pointer-events="none"/>
     {/each}
@@ -377,21 +389,21 @@
         <text x={ps.tx} y={ps.ty} text-anchor={ps.anchor} class="pwr-label" fill={col}>{netName}</text>
       {:else if pin.side==='left'}
         <rect x="0" y={cy-3} width="4" height="6" fill={col} opacity="0.6" pointer-events="none"/>
-        <text x={PIN_R+8} y={cy+4} class="pin-label">{pin.label}</text>
+        <text x={PIN_R+8} y={cy+4} class="pin-label" fill={theme.pinLabel}>{pin.label}</text>
       {:else if pin.side==='right'}
         <rect x={W-4} y={cy-3} width="4" height="6" fill={col} opacity="0.6" pointer-events="none"/>
-        <text x={W-PIN_R-8} y={cy+4} class="pin-label" text-anchor="end">{pin.label}</text>
+        <text x={W-PIN_R-8} y={cy+4} class="pin-label" text-anchor="end" fill={theme.pinLabel}>{pin.label}</text>
       {:else if pin.side==='top'}
         <rect x={cx-3} y="0" width="6" height="4" fill={col} opacity="0.6" pointer-events="none"/>
-        <text x={cx} y={PIN_R+16} class="pin-label" text-anchor="middle">{pin.label}</text>
+        <text x={cx} y={PIN_R+16} class="pin-label" text-anchor="middle" fill={theme.pinLabel}>{pin.label}</text>
       {:else}
         <rect x={cx-3} y={H-4} width="6" height="4" fill={col} opacity="0.6" pointer-events="none"/>
-        <text x={cx} y={H-PIN_R-6} class="pin-label" text-anchor="middle">{pin.label}</text>
+        <text x={cx} y={H-PIN_R-6} class="pin-label" text-anchor="middle" fill={theme.pinLabel}>{pin.label}</text>
       {/if}
     {/each}
     {#if comp.props}
       {#each Object.entries(comp.props) as [k,v], i}
-        <text x={comp.width/2} y={TITLE_H+22+i*16} class="comp-prop" text-anchor="middle">{k}: {v}</text>
+        <text x={comp.width/2} y={TITLE_H+22+i*16} class="comp-prop" fill={isLightMode ? '#475569' : '#8888aa'} text-anchor="middle">{k}: {v}</text>
       {/each}
     {/if}
   {/if}
@@ -401,11 +413,11 @@
   .comp-node { cursor:pointer; user-select:none; }
   .comp-body { transition:filter 0.1s; }
   .comp-node:hover .comp-body { filter:brightness(1.18); }
-  .comp-label  { font:700 13px/1 -apple-system,sans-serif; fill:#fff; pointer-events:none; }
-  .comp-sublabel { font:10px/1 'Consolas',monospace; fill:rgba(255,255,255,0.4); pointer-events:none; }
-  .pin-label   { font:600 11px/1 'Consolas','Courier New',monospace; fill:#dde2f0; pointer-events:none; }
-  .pin-num     { font:9px/1 'Consolas',monospace; fill:#505080; pointer-events:none; }
-  .comp-prop   { font:11px/1 'Consolas',monospace; fill:#8888aa; pointer-events:none; }
+  .comp-label  { font:700 13px/1 -apple-system,sans-serif; pointer-events:none; }
+  .comp-sublabel { font:10px/1 'Consolas',monospace; pointer-events:none; }
+  .pin-label   { font:600 11px/1 'Consolas','Courier New',monospace; pointer-events:none; }
+  .pin-num     { font:9px/1 'Consolas',monospace; pointer-events:none; }
+  .comp-prop   { font:11px/1 'Consolas',monospace; pointer-events:none; }
   .pin-dot     { cursor:crosshair; transition:r 0.12s, opacity 0.15s; }
   .pin-dot:hover { r:10; stroke:#fff !important; stroke-width:2 !important; }
   .pin-compatible {

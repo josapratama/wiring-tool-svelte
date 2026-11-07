@@ -351,4 +351,85 @@
   .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
   .legend-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #94a3b8; }
   .ldot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid #1e293b; }
+
+  /* ── Light Mode Integration ── */
+  :global(.light-app) .panel {
+    background: #ffffff;
+    color: #0f172a;
+  }
+  :global(.light-app) .section-title {
+    color: #475569;
+  }
+  :global(.light-app) .field span {
+    color: #475569;
+  }
+  :global(.light-app) .field input,
+  :global(.light-app) .field select {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #0f172a;
+  }
+  :global(.light-app) .field input:focus,
+  :global(.light-app) .field select:focus {
+    border-color: #0284c7;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+  }
+  :global(.light-app) .conn-info {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+  }
+  :global(.light-app) .conn-lbl {
+    color: #64748b;
+  }
+  :global(.light-app) .conn-val {
+    color: #0284c7;
+  }
+  :global(.light-app) .conn-pin {
+    color: #334155;
+  }
+  :global(.light-app) .btn-act {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #334155;
+  }
+  :global(.light-app) .btn-act:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
+  }
+  :global(.light-app) .btn-act.danger {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+  }
+  :global(.light-app) .btn-act.danger:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+  }
+  :global(.light-app) .multi-row {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+  :global(.light-app) .multi-name {
+    color: #0f172a;
+  }
+  :global(.light-app) .pin-table th {
+    color: #64748b;
+  }
+  :global(.light-app) .pin-table td {
+    color: #334155;
+    border-top-color: #e2e8f0;
+  }
+  :global(.light-app) .legend {
+    border-top-color: #e2e8f0;
+  }
+  :global(.light-app) .legend-title {
+    color: #64748b;
+  }
+  :global(.light-app) .legend-row {
+    color: #475569;
+  }
+  :global(.light-app) .empty p {
+    color: #64748b;
+  }
 </style>

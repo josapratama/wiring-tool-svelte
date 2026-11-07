@@ -679,8 +679,9 @@
         <div class="tg toggles-group">
           <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()} title="Tampilkan/Sembunyikan Grid (G)">⊞ Grid</button>
           <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Tampilkan/Sembunyikan Minimap (M)">🗺</button>
-          <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema Kanvas (Light / Dark)">
-            {isLightMode ? '☀️' : '🌙'}
+          <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema (Light / Dark)">
+            <span>{isLightMode ? '☀️' : '🌙'}</span>
+            <span class="tbtn-txt">{isLightMode ? 'Light' : 'Dark'}</span>
           </button>
         </div>
 
@@ -1060,6 +1061,16 @@
       display: flex; align-items: center; justify-content: space-between;
       padding: 10px 12px; border-bottom: 1px solid #1e293b;
       font-weight: 700; font-size: 12px; color: #38bdf8; background: #0b0f19;
+    }
+    .app.light-app .sidebar-wrapper.left-wrap,
+    .app.light-app .sidebar-wrapper.right-wrap {
+      background: #ffffff;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    }
+    .app.light-app .mobile-sidebar-head {
+      background: #ffffff;
+      border-bottom-color: #e2e8f0;
+      color: #0284c7;
     }
     @keyframes slide-right { from{transform:translateX(-100%)} to{transform:translateX(0)} }
     @keyframes slide-left { from{transform:translateX(100%)} to{transform:translateX(0)} }

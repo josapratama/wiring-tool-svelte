@@ -773,6 +773,7 @@
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <div
   class="canvas-wrap"
+  class:light-mode={isLightMode}
   bind:this={containerEl}
   role="application"
   aria-label="Wiring diagram canvas"
@@ -804,6 +805,7 @@
       </pattern>
       <pattern id="grid-light" width="100" height="100" patternUnits="userSpaceOnUse"
         patternTransform="translate({svgVx},{svgVy}) scale({svgVscale})">
+        <rect width="100" height="100" fill="#f8fafc"/>
         <rect width="100" height="100" fill="url(#grid-sm-light)"/>
         <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#cbd5e1" stroke-width="1"/>
       </pattern>
@@ -817,7 +819,7 @@
     {#if showGrid}
       <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? 'url(#grid-light)' : 'url(#grid-lg)'}/>
     {:else}
-      <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? '#ffffff' : '#0d0d1a'}/>
+      <rect id="grid-bg" width="100%" height="100%" fill={isLightMode ? '#f8fafc' : '#0d0d1a'}/>
     {/if}
 
     <g transform="translate({svgVx},{svgVy}) scale({svgVscale})">
@@ -948,6 +950,18 @@
   .canvas-wrap {
     flex:1; position:relative; overflow:hidden; background:#0d0d1a;
     display:flex; flex-direction:column; cursor:default;
+  }
+  .canvas-wrap.light-mode {
+    background:#f8fafc;
+  }
+  .canvas-wrap.light-mode .status-bar {
+    background:#ffffff; border-top-color:#e2e8f0; color:#64748b;
+  }
+  .canvas-wrap.light-mode .zoom-badge {
+    background:rgba(255,255,255,0.95); border-color:#cbd5e1; color:#0f172a; box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  }
+  .canvas-wrap.light-mode .inline-edit {
+    background:#ffffff; border-color:#0284c7; color:#0f172a;
   }
   svg { flex:1; display:block; width:100%; height:100%; }
   .cur-cross { cursor:crosshair; }
