@@ -10,11 +10,21 @@
 
   <!-- ─── Top Control Bar ─── -->
   <header class="sim-topbar">
-    <div class="brand">
-      <div class="brand-icon">⚡</div>
-      <div class="brand-title">
-        VIRTUAL MCU SIMULATOR
-        <span>Mini-Wokwi v1.0</span>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <a
+        href="../"
+        class="btn-ctrl"
+        style="text-decoration: none; display: flex; align-items: center; gap: 6px; background: #334155; color: #f8fafc; font-size: 11px; padding: 6px 12px; border-radius: 8px;"
+        title="Kembali ke Web Schematic Wiring Tool"
+      >
+        ← Kembali ke Designer
+      </a>
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-title">
+          VIRTUAL MCU SIMULATOR
+          <span>Mini-Wokwi v1.0</span>
+        </div>
       </div>
     </div>
 
@@ -149,6 +159,7 @@
   <!-- Hardware Component Scripts -->
   <script src="js/components/led.js"></script>
   <script src="js/components/button.js"></script>
+  <script src="js/components/buzzer.js"></script>
   <script src="js/components/oled_ssd1306.js"></script>
   <script src="js/components/logic_gates.js"></script>
 

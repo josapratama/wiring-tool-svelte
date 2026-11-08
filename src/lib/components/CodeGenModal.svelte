@@ -6,11 +6,15 @@
   export let wires = []
   export let projectName = 'WiringDiagram'
 
-  let activeTab = 'cpp'
+  let activeTab = 'sketch' // 'sketch' | 'cpp' | 'python'
   let copied = false
 
   $: codeResult = generatePinCode(components, wires, projectName)
-  $: activeCode = activeTab === 'cpp' ? codeResult.cpp : codeResult.python
+  $: activeCode = activeTab === 'sketch'
+    ? (codeResult.sketch || codeResult.cpp)
+    : activeTab === 'cpp'
+    ? codeResult.cpp
+    : codeResult.python
 
   function copyCode() {
     navigator.clipboard.writeText(activeCode)
@@ -19,9 +23,9 @@
   }
 
   function downloadCode() {
-    const ext = activeTab === 'cpp' ? 'h' : 'py'
-    const mime = activeTab === 'cpp' ? 'text/x-c' : 'text/x-python'
-    const filename = (projectName || 'pins').toLowerCase().replace(/[^a-z0-9]+/g, '_') + `_pins.${ext}`
+    const ext = activeTab === 'sketch' ? 'ino' : activeTab === 'cpp' ? 'h' : 'py'
+    const mime = activeTab === 'python' ? 'text/x-python' : 'text/x-c'
+    const filename = (projectName || 'sketch').toLowerCase().replace(/[^a-z0-9]+/g, '_') + `.${ext}`
     const blob = new Blob([activeCode], { type: mime })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -29,6 +33,17 @@
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  function launchInSimulator() {
+    try {
+      const data = {
+        project: projectName,
+        code: codeResult.sketch || codeResult.cpp,
+      }
+      localStorage.setItem('simulator_launch_data', JSON.stringify(data))
+    } catch {}
+    window.open('./simulator/index.html', '_blank')
   }
 </script>
 
@@ -39,17 +54,20 @@
     <div class="modal-box" on:click|stopPropagation role="dialog" aria-label="Auto Pin Definitions Generator" tabindex="-1">
       <div class="modal-head">
         <div class="head-left">
-          <span>💻 Auto Pin-Definition Code Generator</span>
+          <span>💻 Auto Pin-Definition & Firmware Generator</span>
         </div>
         <button class="btn-close" on:click={() => show = false}>✕</button>
       </div>
 
       <div class="modal-tabs">
+        <button class="tab-btn" class:active={activeTab==='sketch'} on:click={() => activeTab = 'sketch'}>
+          <span>Arduino Sketch (.ino)</span>
+        </button>
         <button class="tab-btn" class:active={activeTab==='cpp'} on:click={() => activeTab = 'cpp'}>
-          <span>C / C++ Header (Arduino / ESP-IDF)</span>
+          <span>C / C++ Header (pins.h)</span>
         </button>
         <button class="tab-btn" class:active={activeTab==='python'} on:click={() => activeTab = 'python'}>
-          <span>Python (MicroPython / CircuitPython)</span>
+          <span>MicroPython (pins.py)</span>
         </button>
       </div>
 
@@ -59,7 +77,9 @@
 
       <div class="modal-footer">
         <div class="footer-left">
-          <span class="file-hint">Format: <strong>{activeTab === 'cpp' ? 'pins.h' : 'pins.py'}</strong></span>
+          <button class="btn-sim-lab" on:click={launchInSimulator} title="Jalankan kode ini langsung di Virtual MCU Lab">
+            ⚡ Simulasikan di Virtual MCU Lab →
+          </button>
         </div>
         <div class="footer-actions">
           <button class="btn-action" on:click={downloadCode}>💾 Download File</button>
@@ -118,7 +138,15 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 18px; border-top: 1px solid #252545; background: #101024;
   }
-  .file-hint { font-size: 12px; color: #707095; }
+  .btn-sim-lab {
+    background: #0f172a; border: 1.5px solid #00f0ff; color: #00f0ff;
+    padding: 7px 14px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+  }
+  .btn-sim-lab:hover {
+    background: #00f0ff; color: #0f172a; box-shadow: 0 0 16px rgba(0, 240, 255, 0.5);
+  }
   .footer-actions { display: flex; gap: 10px; }
   .btn-action {
     background: #1e1e38; border: 1px solid #353565; border-radius: 5px;

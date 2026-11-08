@@ -94,31 +94,50 @@ class VirtualMCU {
 
   // ─── Arduino Standard API Execution ───
 
+  _resolvePin(pinRef) {
+    if (typeof pinRef === "number") {
+      return this.pins.find(p => p.num === pinRef) || null;
+    }
+    const str = String(pinRef || "").trim();
+    const direct = this.pins.find(p => p.id === str || p.name === str || String(p.num) === str);
+    if (direct) return direct;
+    const num = parseInt(str.replace(/\D/g, ""), 10);
+    if (!isNaN(num)) {
+      return this.pins.find(p => p.num === num) || null;
+    }
+    return null;
+  }
+
   pinMode(pinNum, mode) {
-    this.pinModes.set(pinNum, mode);
+    const p = this._resolvePin(pinNum);
+    const key = p?.num ?? (typeof pinNum === "number" ? pinNum : parseInt(pinNum, 10) || pinNum);
+    this.pinModes.set(key, mode);
     if (this.engine) this.engine.rebuildNets();
   }
 
   digitalWrite(pinNum, value) {
-    this.pinOutputs.set(pinNum, value ? 1 : 0);
+    const p = this._resolvePin(pinNum);
+    const key = p?.num ?? (typeof pinNum === "number" ? pinNum : parseInt(pinNum, 10) || pinNum);
+    this.pinOutputs.set(key, value ? 1 : 0);
     if (this.engine) this.engine.notifyStateChange();
   }
 
   digitalRead(pinNum) {
-    const pinObj = this.pins.find(p => p.num === pinNum);
+    const pinObj = this._resolvePin(pinNum);
     if (!pinObj || !this.engine) return 0;
     const netState = this.engine.getNetState(this.id, pinObj.id);
     return netState.voltage > 1.2 || netState.logic === 1 ? 1 : 0;
   }
 
   analogWrite(pinNum, duty) {
-    // PWM duty (0 to 255)
-    this.pinOutputs.set(pinNum, Math.max(0, Math.min(255, duty)));
+    const p = this._resolvePin(pinNum);
+    const key = p?.num ?? (typeof pinNum === "number" ? pinNum : parseInt(pinNum, 10) || pinNum);
+    this.pinOutputs.set(key, Math.max(0, Math.min(255, duty)));
     if (this.engine) this.engine.notifyStateChange();
   }
 
   analogRead(pinNum) {
-    const pinObj = this.pins.find(p => p.num === pinNum);
+    const pinObj = this._resolvePin(pinNum);
     if (!pinObj || !this.engine) return 0;
     const netState = this.engine.getNetState(this.id, pinObj.id);
     // ADC 12-bit (0-3.3V -> 0-4095)

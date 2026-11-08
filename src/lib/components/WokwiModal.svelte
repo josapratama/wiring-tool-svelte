@@ -31,6 +31,17 @@
   function openWokwi() {
     window.open('https://wokwi.com', '_blank')
   }
+
+  function launchInSimulator() {
+    try {
+      const data = {
+        project: projectName,
+        wokwi: wokwiObj,
+      }
+      localStorage.setItem('simulator_launch_data', JSON.stringify(data))
+    } catch {}
+    window.open('./simulator/index.html', '_blank')
+  }
 </script>
 
 {#if show}
@@ -56,8 +67,11 @@
       </div>
 
       <div class="modal-footer">
-        <div class="footer-left">
-          <button class="btn-secondary" on:click={openWokwi}>🌐 Buka Wokwi.com ↗</button>
+        <div class="footer-left" style="display: flex; gap: 8px;">
+          <button class="btn-action" style="border-color: #00f0ff; color: #00f0ff;" on:click={launchInSimulator}>
+            ⚡ Jalankan di Virtual MCU Lab →
+          </button>
+          <button class="btn-secondary" on:click={openWokwi}>🌐 Wokwi.com ↗</button>
         </div>
         <div class="footer-actions">
           <button class="btn-action" on:click={downloadJson}>💾 Download diagram.json</button>

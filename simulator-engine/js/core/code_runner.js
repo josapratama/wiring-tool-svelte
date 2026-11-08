@@ -24,25 +24,40 @@ class CodeRunner {
   transpile(cCode) {
     let js = cCode;
 
-    // Remove comments
-    js = js.replace(/\/\*[\s\S]*?\*\/|([^:]|^)\/\/.*$/gm, "");
+    // 1. Remove comments safely (preserving newlines)
+    js = js.replace(/\/\*[\s\S]*?\*\//g, "");
+    js = js.replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-    // Constants mapping
+    // 2. Strip preprocessor directives: #include, #pragma
+    js = js.replace(/^\s*#\s*(?:include|pragma)\b.*$/gm, "");
+
+    // 3. Transform #define NAME VALUE -> const NAME = VALUE;
+    js = js.replace(/^\s*#\s*define\s+([A-Za-z0-9_]+)\s+([^/\r\n]+).*$/gm, (match, name, val) => {
+      const cleanVal = val.trim();
+      if (!cleanVal) return `/* #define ${name} */`;
+      return `const ${name} = ${cleanVal};`;
+    });
+    js = js.replace(/^\s*#\s*define\s+([A-Za-z0-9_]+)\s*$/gm, "/* #define $1 */");
+
+    // 4. Constants mapping
     js = js.replace(/\bOUTPUT\b/g, '"OUTPUT"');
     js = js.replace(/\bINPUT_PULLUP\b/g, '"INPUT_PULLUP"');
     js = js.replace(/\bINPUT\b/g, '"INPUT"');
     js = js.replace(/\bHIGH\b/g, "1");
     js = js.replace(/\bLOW\b/g, "0");
 
-    // Replace C types with let/const
-    js = js.replace(/\b(int|float|double|char|byte|bool|boolean|long|unsigned int|uint8_t|uint16_t|uint32_t|String)\s+([a-zA-Z0-9_]+)/g, "let $2");
+    // 5. C types with const: const int x -> const x
+    js = js.replace(/\bconst\s+(?:int|float|double|char|byte|bool|boolean|long|unsigned\s+int|uint8_t|uint16_t|uint32_t|String)\s+([a-zA-Z0-9_]+)/g, "const $1");
 
-    // Replace function definitions: void setup() -> async function setup()
+    // 6. C types without const: int x -> let x
+    js = js.replace(/\b(?:int|float|double|char|byte|bool|boolean|long|unsigned\s+int|uint8_t|uint16_t|uint32_t|String)\s+([a-zA-Z0-9_]+)/g, "let $1");
+
+    // 7. Function definitions
     js = js.replace(/\bvoid\s+setup\s*\(\s*\)/g, "async function setup()");
     js = js.replace(/\bvoid\s+loop\s*\(\s*\)/g, "async function loop()");
-    js = js.replace(/\bvoid\s+([a-zA-Z0-9_]+)\s*\(/g, "async function $1(");
+    js = js.replace(/\b(?:void|int|bool|boolean|float|double|String)\s+([a-zA-Z0-9_]+)\s*\(/g, "async function $1(");
 
-    // Replace delay(ms) with await delay(ms)
+    // 8. Replace delay(ms) with await delay(ms)
     js = js.replace(/\bdelay\s*\(\s*([^)]+)\s*\)/g, "await delay($1)");
 
     return js;

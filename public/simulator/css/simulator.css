@@ -1,0 +1,299 @@
+/* ============================================================
+   Web Microcontroller & Circuit Logic Simulator — Cyberpunk Dark HUD
+   ============================================================ */
+
+:root {
+  --bg-dark: #080c16;
+  --bg-panel: #0d1322;
+  --border-subtle: rgba(56, 189, 248, 0.15);
+  --border-glow: rgba(56, 189, 248, 0.4);
+  --cyan-neon: #00f0ff;
+  --blue-neon: #3b82f6;
+  --emerald-neon: #10b981;
+  --amber-neon: #f59e0b;
+  --red-neon: #ef4444;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Topbar ─── */
+.sim-topbar {
+  height: 52px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 50;
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-icon {
+  width: 30px;
+  height: 30px;
+  background: linear-gradient(135deg, rgba(0,240,255,0.2), rgba(59,130,246,0.3));
+  border: 1px solid var(--cyan-neon);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.brand-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.brand-title span {
+  font-size: 10px;
+  color: var(--cyan-neon);
+  background: rgba(0,240,255,0.15);
+  border: 1px solid rgba(0,240,255,0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  margin-left: 6px;
+}
+
+.btn-ctrl {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+}
+
+.btn-run {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(16,185,129,0.3);
+}
+.btn-run:hover {
+  background: #10b981;
+  box-shadow: 0 0 18px rgba(16,185,129,0.5);
+}
+
+.btn-stop {
+  background: rgba(239,68,68,0.2);
+  border-color: rgba(239,68,68,0.4);
+  color: #fca5a5;
+}
+.btn-stop:hover {
+  background: rgba(239,68,68,0.4);
+}
+
+.btn-step {
+  background: rgba(30,41,59,0.8);
+  border-color: var(--border-subtle);
+  color: var(--cyan-neon);
+}
+.btn-step:hover {
+  background: rgba(56,189,248,0.2);
+}
+
+/* ─── Main Workspace: 2-Column Split ─── */
+.sim-workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 480px 1fr;
+  height: calc(100vh - 52px - 32px);
+  overflow: hidden;
+}
+
+@media (max-width: 1200px) {
+  .sim-workspace {
+    grid-template-columns: 400px 1fr;
+  }
+}
+
+/* Left Pane: Code Editor & Serial Monitor */
+.editor-pane {
+  background: #090d18;
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-header {
+  height: 38px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--cyan-neon);
+}
+
+.code-textarea {
+  flex: 1;
+  background: #060913;
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+  border: none;
+  outline: none;
+  resize: none;
+  tab-size: 2;
+  white-space: pre;
+}
+
+/* Serial Terminal */
+.serial-pane {
+  height: 180px;
+  background: #04060c;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+}
+
+.serial-header {
+  height: 28px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.serial-logs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #10b981;
+}
+
+.serial-line {
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.serial-input-row {
+  display: flex;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.serial-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+/* Right Pane: Breadboard Canvas & Component Toolbar */
+.canvas-pane {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.component-toolbar {
+  height: 42px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  overflow-x: auto;
+  z-index: 10;
+}
+
+.btn-tool {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(30,41,59,0.7);
+  border: 1px solid var(--border-subtle);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.btn-tool:hover {
+  background: rgba(56,189,248,0.2);
+  border-color: var(--cyan-neon);
+  color: #fff;
+}
+
+.canvas-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #0a0f1d 0%, #05070f 100%);
+}
+
+#circuit-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ─── Bottom Statusbar ─── */
+.sim-statusbar {
+  height: 32px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+

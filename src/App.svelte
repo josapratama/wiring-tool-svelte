@@ -24,6 +24,8 @@
   } from '$lib/store/diagram.js'
   import { findCompDef } from '$lib/data/components-db.js'
   import { runERC }      from '$lib/engine/erc.js'
+  import { generatePinCode } from '$lib/engine/codegen.js'
+  import { generateWokwiDiagram } from '$lib/engine/wokwi.js'
   import { onMount }     from 'svelte'
 
   let canvasRef = {}  // filled by Canvas via bind:api
@@ -185,6 +187,23 @@
     isLightMode = !isLightMode
     try { localStorage.setItem('wiretool_theme', isLightMode ? 'light' : 'dark') } catch {}
     flash(isLightMode ? '☀️ Light Mode diaktifkan' : '🌙 Dark Mode diaktifkan')
+  }
+
+  function openSimulatorLab() {
+    try {
+      const pinCode = generatePinCode($compsStore, $wiresStore, projectName)
+      const wokwiObj = generateWokwiDiagram($compsStore, $wiresStore, projectName)
+      const data = {
+        project: projectName,
+        code: pinCode.sketch || pinCode.cpp,
+        wokwi: wokwiObj
+      }
+      localStorage.setItem('simulator_launch_data', JSON.stringify(data))
+    } catch (e) {
+      console.warn('Failed to save simulator launch data:', e)
+    }
+    window.open('./simulator/index.html', '_blank')
+    flash('⚡ Membuka Virtual MCU Simulator Lab...')
   }
 
   function exportPNG() {
@@ -763,6 +782,9 @@
               <button class="rdd-item" on:click={() => { showCodeGenModal = true; activeRibbon = null }}>
                 <span class="rdd-icon">💻</span> Generate Firmware Pin Code
               </button>
+              <button class="rdd-item" on:click={() => { openSimulatorLab(); activeRibbon = null }}>
+                <span class="rdd-icon">⚡</span> Buka Virtual MCU Simulator Lab
+              </button>
               <button class="rdd-item" on:click={() => { showStats = true; activeRibbon = null }}>
                 <span class="rdd-icon">📊</span> Diagram Statistics
               </button>
@@ -833,6 +855,11 @@
       <!-- Code generator button -->
       <button class="btn btn-code" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
         💻 <span class="btn-text">Code</span>
+      </button>
+
+      <!-- Simulator Lab button -->
+      <button class="btn btn-sim" on:click={openSimulatorLab} title="Buka Virtual MCU & Circuit Simulator Lab">
+        ⚡ <span class="btn-text">Simulator</span>
       </button>
 
       <!-- Export Dropdown -->
@@ -1240,6 +1267,8 @@
   .badge-erc-ok{ background:rgba(74,222,128,0.15); color:#4ade80; border:1px solid #4ade80; }
 
   .btn-code{ background:#1e293b; }
+  .btn-sim{ background:#0e3a53; color:#38bdf8; border:1px solid #0284c7; }
+  .btn-sim:hover{ background:#0284c7; color:#fff; box-shadow:0 0 12px rgba(56,189,248,0.4); }
   .flash{ font-size:12px; color:#4ade80; font-weight:600; animation:fade-in .15s; }
 
   /* ── Export Dropdown ── */

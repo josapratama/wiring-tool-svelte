@@ -29,7 +29,8 @@ export function generatePinCode(components = [], wires = [], projectName = 'Wiri
   if (!mcus.length) {
     return {
       cpp: '// Tidak ada komponen MCU (ESP32 / Arduino / RPi) yang ditemukan di diagram.',
-      python: '# Tidak ada komponen MCU (ESP32 / Arduino / RPi) yang ditemukan di diagram.'
+      python: '# Tidak ada komponen MCU (ESP32 / Arduino / RPi) yang ditemukan di diagram.',
+      sketch: '// Tambahkan MCU (ESP32 / Arduino) ke kanvas untuk men-generate kode firmware.'
     }
   }
 
@@ -135,6 +136,56 @@ export function generatePinCode(components = [], wires = [], projectName = 'Wiri
     py += `\n`
   })
 
-  return { cpp, python: py }
+  // 3. Generate Complete Arduino Sketch (.ino)
+  let sketch = `// =============================================================================\n`
+  sketch += `// Ready-to-Run Arduino / ESP32 Firmware Sketch\n`
+  sketch += `// Project: ${projectName}\n`
+  sketch += `// Date: ${new Date().toLocaleString()}\n`
+  sketch += `// =============================================================================\n\n`
+
+  sections.forEach(sec => {
+    sec.connections.forEach(c => {
+      sketch += `const int ${c.macroName} = ${c.gpioVal}; // ${c.compLabel} (${c.pinLabel})\n`
+    })
+  })
+
+  sketch += `\nvoid setup() {\n`
+  sketch += `  Serial.begin(115200);\n`
+  sketch += `  delay(500);\n`
+  sketch += `  Serial.println("${projectName} Initialized!");\n\n`
+
+  sections.forEach(sec => {
+    sec.connections.forEach(c => {
+      const isInput =
+        c.compLabel.toLowerCase().includes('btn') ||
+        c.compLabel.toLowerCase().includes('button') ||
+        c.compLabel.toLowerCase().includes('sensor') ||
+        c.compLabel.toLowerCase().includes('switch') ||
+        c.pinLabel.toLowerCase().includes('in')
+      const mode = isInput ? 'INPUT_PULLUP' : 'OUTPUT'
+      sketch += `  pinMode(${c.macroName}, ${mode});\n`
+    })
+  })
+  sketch += `}\n\n`
+  sketch += `void loop() {\n`
+  sketch += `  Serial.println("[Heartbeat] System running...");\n`
+
+  const firstOutput = sections[0]?.connections.find(c =>
+    c.compLabel.toLowerCase().includes('led') ||
+    c.compLabel.toLowerCase().includes('buzzer') ||
+    c.compLabel.toLowerCase().includes('relay')
+  )
+
+  if (firstOutput) {
+    sketch += `  digitalWrite(${firstOutput.macroName}, HIGH);\n`
+    sketch += `  delay(1000);\n`
+    sketch += `  digitalWrite(${firstOutput.macroName}, LOW);\n`
+    sketch += `  delay(1000);\n`
+  } else {
+    sketch += `  delay(1000);\n`
+  }
+  sketch += `}\n`
+
+  return { cpp, python: py, sketch }
 }
 

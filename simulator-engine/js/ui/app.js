@@ -18,8 +18,79 @@ function initSimulator() {
   // 3. Initialize Serial Monitor
   serialMonitor = new SerialMonitor("serial-output", "serial-input-box", "serial-baud");
 
-  // 4. Load initial example ("blink")
-  loadExample("blink");
+  // 4. Check for diagram launch data from Visual Wiring Tool
+  const customLaunch = (() => {
+    try {
+      const raw = localStorage.getItem("simulator_launch_data");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  if (customLaunch && customLaunch.code) {
+    CIRCUIT_EXAMPLES.custom = {
+      title: `⚡ Proyek: ${customLaunch.project || "Dari Wiring Designer"}`,
+      code: customLaunch.code,
+      setup: (engine) => {
+        engine.reset();
+        engine.components.clear();
+        engine.wires = [];
+        const mcu = new VirtualMCU("mcu1", "ESP32-S3", 80, 80);
+        engine.addComponent(mcu);
+
+        if (customLaunch.wokwi && Array.isArray(customLaunch.wokwi.parts)) {
+          let offsetX = 340,
+            offsetY = 90;
+          customLaunch.wokwi.parts.forEach((p, idx) => {
+            if (
+              p.type &&
+              (p.type.includes("esp32") || p.type.includes("arduino"))
+            )
+              return;
+            let comp = null;
+            if (p.type.includes("led"))
+              comp = new VirtualLED(`led_${idx}`, "red", offsetX, offsetY);
+            else if (p.type.includes("pushbutton"))
+              comp = new VirtualButton(`btn_${idx}`, offsetX, offsetY);
+            else if (p.type.includes("buzzer"))
+              comp = new VirtualBuzzer(`buzzer_${idx}`, offsetX, offsetY);
+            else if (p.type.includes("potentiometer"))
+              comp = new VirtualPotentiometer(`pot_${idx}`, offsetX, offsetY);
+            else if (p.type.includes("ssd1306"))
+              comp = new VirtualOledSSD1306(`oled_${idx}`, offsetX, offsetY);
+            if (comp) {
+              engine.addComponent(comp);
+              offsetY += 95;
+              if (offsetY > 380) {
+                offsetY = 90;
+                offsetX += 130;
+              }
+            }
+          });
+        } else {
+          const led = new VirtualLED("led1", "green", 340, 140);
+          engine.addComponent(led);
+          engine.addWire("mcu1", "D2", "led1", "anode", "#10b981");
+          engine.addWire("mcu1", "GND_1", "led1", "cathode", "#000000");
+        }
+        return mcu;
+      },
+    };
+
+    const sel = document.getElementById("example-selector");
+    if (sel) {
+      const opt = document.createElement("option");
+      opt.value = "custom";
+      opt.textContent = `⚡ 0. ${customLaunch.project || "Rangkaian dari Wiring Tool"}`;
+      sel.insertBefore(opt, sel.firstChild);
+      sel.value = "custom";
+    }
+    loadExample("custom");
+  } else {
+    // Load initial example ("blink")
+    loadExample("blink");
+  }
 
   // Hook Serial output to monitor
   activeMCU.onSerialOutput = (text) => {
