@@ -1,66 +1,52 @@
-# wiring-tool-svelte
+# 🔌 Virtual Circuits Lab & Wiring Tool
 
-A browser-based electronics wiring diagram tool built with **Svelte 5** + **Vite**.
+A complete browser-based electronics design and MCU simulation suite built with **Svelte 5 + Vite** and pure client-side JavaScript.
 
-Draw connections between microcontrollers and peripherals visually — no backend required.
+---
 
-## Features
+## 🌟 Modules
 
-- 🧠 Component library: ESP32, Arduino, RPi, sensors, power, passive components
-- 🔌 Wire routing with auto-label (SDA, SCL, MOSI, etc.)
-- 🖱 Pan (Alt+drag / middle-click), scroll-to-zoom, fit view
-- 🔲 Rubber-band multi-select, multi-drag, batch delete (single undo step)
-- ✏️ Inline rename (double-click), label drag on canvas
-- 🗺 Minimap with click-to-pan
-- ↩ Undo / Redo (80-step history)
-- 💾 Auto-save to localStorage with restore prompt
-- 📐 Export: JSON · SVG · PNG · Netlist CSV · BOM CSV
-- ⌨️ Keyboard shortcuts overlay (`?`)
-- 📊 Diagram stats overlay
-- 🎨 Wire color picker + quick colors
-- 🔍 Snap-to-pin while drawing wires
-- 🔁 Junction dots at T-intersections
-- 📋 Quick Templates (ESP32-S3, ESP32, Arduino, RPi)
+```
+wiring-tool-svelte/
+├── src/                      # Svelte 5 Visual Schematic & Wiring Diagram Tool
+├── simulator-engine/         # Pure Web Virtual MCU & Circuit Simulator (Wokwi Clone)
+└── docker-compose.yml        # Multi-service container orchestration
+```
 
-## Getting Started
+### 1. Visual Wiring Diagram Tool (`/src`)
+- **Built with**: Svelte 5 + Vite.
+- **Component Library**: ESP32, Arduino Uno, Raspberry Pi, sensors, power modules, passive components.
+- **Interactive Routing**: Auto-label wire routing (SDA, SCL, MOSI, MISO, PWM, VCC, GND).
+- **Canvas Navigation**: Pan (Alt+drag), scroll-to-zoom, rubber-band multi-select, 80-step undo/redo.
 
+### 2. Virtual MCU & Circuit Logic Simulator (`/simulator-engine`)
+- **Built with**: Nodal electrical circuit solver with Union-Find net routing.
+- **Virtual MCU**: Dual MCU support (ESP32-S3 and Arduino Uno) with 12-bit ADC, PWM, GPIO interrupt, and I2C/UART bus.
+- **Interactive Components**: OLED SSD1306 (128x64 canvas), Piezo Buzzer (8-bit Web Audio API), 74HC Series Logic Gates (AND, OR, NOT, XOR, NAND, NOR), LEDs, Buttons, Potentiometers.
+- **Real-Time C++ Transpiler**: Asynchronous non-blocking Arduino C++ runtime execution directly in the browser.
+
+---
+
+## 🚀 Quick Start
+
+### Run with Docker Compose
 ```bash
+docker compose up -d
+```
+- **Visual Wiring Tool**: `http://localhost:5174`
+- **MCU Simulation Lab**: `http://localhost:8084`
+
+### Run Locally with Node.js
+```bash
+# 1. Visual Wiring Tool
 npm install
 npm run dev
+
+# 2. MCU Simulation Lab
+npx serve simulator-engine -p 8084
 ```
 
-Build for production:
+---
 
-```bash
-npm run build
-```
-
-The output in `dist/` is fully static — open `dist/index.html` directly in a browser.
-
-## Keyboard Shortcuts
-
-| Key        | Action                   |
-| ---------- | ------------------------ |
-| `V`        | Select tool              |
-| `W`        | Wire tool                |
-| `L`        | Label tool               |
-| `Del`      | Delete selected          |
-| `F`        | Fit view                 |
-| `Shift+F`  | Zoom to selection        |
-| `G`        | Toggle grid              |
-| `M`        | Toggle minimap           |
-| `Ctrl+Z/Y` | Undo / Redo              |
-| `Ctrl+D`   | Duplicate                |
-| `Arrows`   | Nudge (Shift = fine 5px) |
-| `Alt+Drag` | Pan canvas               |
-| `?`        | Shortcut overlay         |
-
-## Stack
-
-- [Svelte 5](https://svelte.dev)
-- [Vite 8](https://vitejs.dev)
-- No external UI libraries — pure SVG canvas
-
-## License
-
+## 📄 License
 MIT

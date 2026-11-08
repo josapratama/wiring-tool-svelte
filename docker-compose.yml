@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  wiring-designer:
+    image: node:20-alpine
+    container_name: wiring-designer
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm install && npm run build && npx serve dist -p 5174"
+    ports:
+      - "5174:5174"
+    restart: unless-stopped
+
+  mcu-simulator:
+    image: nginx:alpine
+    container_name: mcu-simulator
+    volumes:
+      - ./simulator-engine:/usr/share/nginx/html:ro
+    ports:
+      - "8084:80"
+    restart: unless-stopped

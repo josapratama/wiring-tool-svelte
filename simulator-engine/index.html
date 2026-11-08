@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Microcontroller & Circuit Logic Simulator ("Mini-Wokwi")</title>
+  <link rel="stylesheet" href="css/simulator.css">
+</head>
+<body>
+
+  <!-- ─── Top Control Bar ─── -->
+  <header class="sim-topbar">
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-title">
+        VIRTUAL MCU SIMULATOR
+        <span>Mini-Wokwi v1.0</span>
+      </div>
+    </div>
+
+    <!-- Example Template Selector -->
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Contoh Rangkaian:</span>
+      <select
+        id="example-selector"
+        onchange="loadExample(this.value)"
+        style="background: #1e293b; color: var(--cyan-neon); border: 1px solid var(--border-glow); padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; outline: none; cursor: pointer;"
+      >
+        <option value="blink">💡 1. Hello Blink LED (GPIO 2)</option>
+        <option value="button_pullup">🔘 2. Push Button Interaktif (Input Pullup)</option>
+        <option value="potentiometer_pwm">🎛️ 3. Potensiometer ADC & PWM Dimmer</option>
+        <option value="oled_counter">📺 4. Display Grafis OLED SSD1306 (I2C)</option>
+        <option value="logic_and_gate">⚡ 5. Gerbang Logika Digital (74HC08 AND Gate)</option>
+      </select>
+    </div>
+
+    <!-- Simulation Controls -->
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button id="btn-run-sim" class="btn-ctrl btn-run" onclick="toggleRun()">
+        ▶ Jalankan
+      </button>
+      <button class="btn-ctrl btn-stop" onclick="stopSimulation()">
+        ⏹ Berhenti
+      </button>
+      <button class="btn-ctrl btn-step" onclick="resetSimulation()" title="Kembalikan rangkaian ke kondisi awal">
+        🔄 Reset
+      </button>
+      <button class="btn-ctrl btn-step" onclick="stepSimulation()" title="Maju satu langkah clock (20ms)">
+        ⏭ Step
+      </button>
+
+      <!-- Speed Multiplier -->
+      <select
+        onchange="setSimSpeed(this.value)"
+        style="background: #1e293b; color: #fff; border: 1px solid var(--border-subtle); padding: 4px 8px; border-radius: 6px; font-size: 11px; outline: none;"
+      >
+        <option value="1.0">1.0x (Normal)</option>
+        <option value="0.5">0.5x (Lambat)</option>
+        <option value="2.0">2.0x (Cepat)</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- ─── Main Workspace Grid ─── -->
+  <main class="sim-workspace">
+    
+    <!-- Left Pane: Arduino C++ Code Editor & Serial Monitor -->
+    <section class="editor-pane">
+      <div class="editor-header">
+        <span>Arduino / C++ Code Editor</span>
+        <span style="font-size: 10px; color: var(--text-muted);">ESP32-S3 CORE</span>
+      </div>
+      
+      <!-- Live Code Editor Textarea -->
+      <textarea
+        id="code-editor-textarea"
+        class="code-textarea"
+        spellcheck="false"
+        placeholder="// Tulis kode Arduino C++ Anda di sini..."
+      ></textarea>
+
+      <!-- Live Serial Monitor Terminal -->
+      <div class="serial-pane">
+        <div class="serial-header">
+          <span>📟 Serial Monitor (UART 0)</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <select id="serial-baud" style="background:transparent; border:none; color:var(--cyan-neon); font-size:10px; cursor:pointer;">
+              <option value="115200">115200 baud</option>
+              <option value="9600">9600 baud</option>
+            </select>
+            <button onclick="serialMonitor.clear()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">Bersihkan</button>
+          </div>
+        </div>
+        <div id="serial-output" class="serial-logs"></div>
+        <div class="serial-input-row">
+          <input
+            id="serial-input-box"
+            type="text"
+            class="serial-input"
+            placeholder="Ketik data dan tekan Enter untuk kirim ke Serial..."
+          />
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Pane: Component Palette & Interactive Breadboard Canvas -->
+    <section class="canvas-pane">
+      
+      <!-- Component Palette Toolbar -->
+      <div class="component-toolbar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--cyan-neon); margin-right: 4px;">+ Komponen:</span>
+        <button class="btn-tool" onclick="addComponent('LED_RED')">🔴 LED Merah</button>
+        <button class="btn-tool" onclick="addComponent('LED_GREEN')">🟢 LED Hijau</button>
+        <button class="btn-tool" onclick="addComponent('LED_BLUE')">🔵 LED Biru</button>
+        <button class="btn-tool" onclick="addComponent('BUTTON')">🔘 Push Button</button>
+        <button class="btn-tool" onclick="addComponent('POTENTIOMETER')">🎛️ Potensiometer</button>
+        <button class="btn-tool" onclick="addComponent('OLED')">📺 OLED SSD1306</button>
+        <button class="btn-tool" onclick="addComponent('BUZZER')">🔊 Buzzer</button>
+        <button class="btn-tool" onclick="addComponent('GATE_AND')">⚡ Gerbang AND</button>
+        <button class="btn-tool" onclick="addComponent('GATE_OR')">⚡ Gerbang OR</button>
+        <button class="btn-tool" onclick="addComponent('GATE_NOT')">⚡ Gerbang NOT</button>
+        <button class="btn-tool" style="margin-left: auto;" onclick="exportCircuit()">💾 Ekspor JSON</button>
+      </div>
+
+      <!-- Canvas Viewport -->
+      <div class="canvas-viewport">
+        <canvas id="circuit-canvas"></canvas>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─── Bottom Status Bar ─── -->
+  <footer class="sim-statusbar">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span>Status:</span>
+      <span id="status-text" style="color: var(--cyan-neon); font-weight: 600;">Ready</span>
+    </div>
+    <div style="color: var(--text-muted); font-size: 10px;">
+      💡 Tip: Tarik garis antar pin komponen untuk menghubungkan kabel. Klik push button atau putar knob potensiometer pada canvas secara langsung.
+    </div>
+  </footer>
+
+  <!-- Core Simulator Engine Scripts -->
+  <script src="js/core/circuit_engine.js"></script>
+  <script src="js/core/virtual_mcu.js"></script>
+  <script src="js/core/code_runner.js"></script>
+
+  <!-- Hardware Component Scripts -->
+  <script src="js/components/led.js"></script>
+  <script src="js/components/button.js"></script>
+  <script src="js/components/oled_ssd1306.js"></script>
+  <script src="js/components/logic_gates.js"></script>
+
+  <!-- UI & Controls Scripts -->
+  <script src="js/ui/canvas_view.js"></script>
+  <script src="js/ui/serial_monitor.js"></script>
+  <script src="js/ui/examples_loader.js"></script>
+  <script src="js/ui/app.js"></script>
+</body>
+</html>
+
