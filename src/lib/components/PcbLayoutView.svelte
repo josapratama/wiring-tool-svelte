@@ -73,6 +73,7 @@
   // ── Synchronize Components from Schematic ───────────────────────────────────
   $: {
     const rawComps = $compsStore
+    const rawWires = $wiresStore
     const existingMap = new Map(pcbComponents.map(c => [c.instanceId, c]))
     
     let defaultCol = 15
@@ -111,6 +112,11 @@
     })
 
     // Recompute ratsnest air-wires
+    updateRatsnest()
+  }
+
+  // Reactive trigger for ratsnest when copper traces change
+  $: if (copperTraces) {
     updateRatsnest()
   }
 
@@ -298,6 +304,14 @@
     } else {
       selectedCompId = null
       selectedTraceId = null
+      routingStart = null
+      routingCurrent = null
+    }
+  }
+
+  function handleCanvasContextMenu(e) {
+    if (routingStart) {
+      e.preventDefault()
       routingStart = null
       routingCurrent = null
     }
@@ -525,6 +539,7 @@
       on:mousemove={onMouseMove}
       on:mouseup={stopPan}
       on:click={handleCanvasClick}
+      on:contextmenu={handleCanvasContextMenu}
     >
       <!-- Canvas SVG Surface -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->

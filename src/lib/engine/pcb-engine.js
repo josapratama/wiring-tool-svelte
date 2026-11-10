@@ -4,13 +4,15 @@
  * Features:
  * - Real Millimeter / Mil / Pixel coordinate space conversions (1mm = 3.7795 px @ 96 DPI)
  * - Standard Electronic Footprint Models (DIP, SMD 0805/1206, SOT-23, Headers 2.54mm, Screw Terminals)
- * - Netlist & Air-Wire (Ratsnest) Minimum Spanning Tree Resolver
+ * - Netlist & Air-Wire (Ratsnest) Minimum Spanning Tree (MST) Resolver with Disjoint-Set Union (DSU)
  * - Interactive Copper Trace Router (Top F.Cu & Bottom B.Cu with 45-degree angle snap)
  * - DRC (Design Rule Checker): Clearance verification, short circuit check, unrouted net audit
  * - Standard Gerber RS-274X & Excellon NC Drill Exporter (compatible with JLCPCB / PCBWay)
  * - EasyEDA Standard JSON Format Serializer
  * - 1:1 High-Resolution DIY Etching & Toner Transfer SVG Mask Exporter
  */
+
+import { MCU_PINS } from "$lib/data/mcu-pins.js";
 
 // ── Unit Conversions & Coordinate Math ─────────────────────────────────────────
 export const MM_TO_PX = 3.7795275591; // 1mm in standard web SVG pixels (96 DPI)
@@ -65,6 +67,53 @@ export function snapTo45Degrees(startX, startY, currX, currY) {
   };
 }
 
+// ── Disjoint Set Union (DSU) Data Structure for Electrical Nets ───────────────
+export class DisjointSet {
+  constructor() {
+    this.parent = new Map();
+    this.rank = new Map();
+  }
+
+  find(x) {
+    if (!this.parent.has(x)) {
+      this.parent.set(x, x);
+      this.rank.set(x, 0);
+      return x;
+    }
+    let p = this.parent.get(x);
+    if (p !== x) {
+      p = this.find(p);
+      this.parent.set(x, p);
+    }
+    return p;
+  }
+
+  union(x, y) {
+    const rootX = this.find(x);
+    const rootY = this.find(y);
+    if (rootX === rootY) return rootX;
+
+    const rankX = this.rank.get(rootX) || 0;
+    const rankY = this.rank.get(rootY) || 0;
+
+    if (rankX < rankY) {
+      this.parent.set(rootX, rootY);
+      return rootY;
+    } else if (rankX > rankY) {
+      this.parent.set(rootY, rootX);
+      return rootX;
+    } else {
+      this.parent.set(rootY, rootX);
+      this.rank.set(rootX, rankX + 1);
+      return rootX;
+    }
+  }
+
+  connected(x, y) {
+    return this.find(x) === this.find(y);
+  }
+}
+
 // ── Standard Footprint Library (EasyEDA / IPC-7351 Compliant) ─────────────────
 export const STANDARD_FOOTPRINTS = {
   // DIP Microcontrollers & Modules
@@ -78,6 +127,51 @@ export const STANDARD_FOOTPRINTS = {
       { type: "rect", x: -14.0, y: -25.75, w: 28.0, h: 51.5, r: 1.0 },
       { type: "rect", x: -7.0, y: -24.5, w: 14.0, h: 8.0, r: 0.5, desc: "USB" },
       { type: "text", text: "ESP32 DevKit", x: 0, y: 0, size: 2.2 }
+    ]
+  },
+  "ARDUINO-UNO": {
+    package: "ARDUINO-UNO-R3",
+    desc: "Arduino Uno R3 Shield / Module",
+    widthMm: 68.6,
+    heightMm: 53.4,
+    pads: [
+      // Power / Analog Header (8-pin)
+      { num: "RST", name: "RESET", x: -28.0, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "3V3", name: "3.3V", x: -25.46, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "5V", name: "5V", x: -22.92, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "GND1", name: "GND", x: -20.38, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "GND2", name: "GND", x: -17.84, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "VIN", name: "VIN", x: -15.3, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      // Analog In (6-pin)
+      { num: "A0", name: "A0", x: -8.0, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "A1", name: "A1", x: -5.46, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "A2", name: "A2", x: -2.92, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "A3", name: "A3", x: -0.38, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "A4", name: "A4", x: 2.16, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "A5", name: "A5", x: 4.7, y: 22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      // Digital Pins 0-7 (8-pin)
+      { num: "0", name: "D0", x: 28.0, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "1", name: "D1", x: 25.46, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "2", name: "D2", x: 22.92, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "3", name: "D3", x: 20.38, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "4", name: "D4", x: 17.84, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "5", name: "D5", x: 15.3, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "6", name: "D6", x: 12.76, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "7", name: "D7", x: 10.22, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      // Digital Pins 8-13 + GND + AREF (10-pin)
+      { num: "8", name: "D8", x: 6.0, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "9", name: "D9", x: 3.46, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "10", name: "D10", x: 0.92, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "11", name: "D11", x: -1.62, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "12", name: "D12", x: -4.16, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "13", name: "D13", x: -6.7, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "GND3", name: "GND", x: -9.24, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "AREF", name: "AREF", x: -11.78, y: -22.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" }
+    ],
+    silkscreen: [
+      { type: "rect", x: -34.3, y: -26.7, w: 68.6, h: 53.4, r: 2.0 },
+      { type: "rect", x: -33.0, y: -18.0, w: 12.0, h: 10.0, r: 0.5, desc: "USB" },
+      { type: "text", text: "ARDUINO UNO", x: 0, y: 0, size: 2.8 }
     ]
   },
   "ARDUINO-NANO": {
@@ -263,11 +357,18 @@ function generateDipPads(leftCount, rightCount, rowDistanceMm, pitchMm, padSizeM
 
 // ── Footprint Mapper for Schematic Components ─────────────────────────────────
 export function getFootprintForComponent(comp) {
+  if (!comp) return STANDARD_FOOTPRINTS["HEADER-1X4"];
+  if (comp.footprintId && STANDARD_FOOTPRINTS[comp.footprintId]) {
+    return STANDARD_FOOTPRINTS[comp.footprintId];
+  }
   const id = (comp.id || "").toLowerCase();
   const theme = comp.theme || "";
 
   if (id.includes("esp32") || id.includes("s3")) {
     return STANDARD_FOOTPRINTS["ESP32-DEVKIT-V1"];
+  }
+  if (id.includes("arduino-uno") || id === "uno") {
+    return STANDARD_FOOTPRINTS["ARDUINO-UNO"];
   }
   if (id.includes("nano")) {
     return STANDARD_FOOTPRINTS["ARDUINO-NANO"];
@@ -301,61 +402,184 @@ export function getFootprintForComponent(comp) {
   return STANDARD_FOOTPRINTS["HEADER-1X4"];
 }
 
-// ── Netlist & Ratsnest Resolver ───────────────────────────────────────────────
-export function buildPcbNetlist(components, wires) {
-  const pinToNetMap = new Map(); // "compInstId:pinId" -> netId
-  const nets = new Map(); // netId -> array of { compId, pinId, xMm, yMm }
+// ── Normalize Wire Format between Store and Netlist ───────────────────────────
+export function normalizeWire(wire) {
+  if (!wire) return null;
+  const fromComp = wire.from?.compId || wire.from?.comp || wire.fromComp;
+  const fromPin = wire.from?.pinId || wire.from?.pin || wire.fromPin;
+  const toComp = wire.to?.compId || wire.to?.comp || wire.toComp;
+  const toPin = wire.to?.pinId || wire.to?.pin || wire.toPin;
 
-  let netCounter = 1;
+  if (!fromComp || !fromPin || !toComp || !toPin) return null;
 
-  for (const wire of wires) {
-    if (!wire.from || !wire.to) continue;
-    const key1 = `${wire.from.compId}:${wire.from.pinId}`;
-    const key2 = `${wire.to.compId}:${wire.to.pinId}`;
+  return {
+    fromComp: String(fromComp),
+    fromPin: String(fromPin),
+    toComp: String(toComp),
+    toPin: String(toPin),
+    netName: wire.label || wire.net || null,
+    color: wire.color || "#4f9cf9",
+    id: wire.id || null
+  };
+}
 
-    let netId = pinToNetMap.get(key1) || pinToNetMap.get(key2);
-    if (!netId) {
-      netId = `NET_${netCounter++}`;
+// ── Resolve Pad Aliases for Accurate Cross-Domain Pin Matching ────────────────
+export function getCompPadAliases(comp, pad, padIndex) {
+  const aliases = new Set();
+  if (!pad) return [];
+
+  // Direct pad properties
+  if (pad.num !== undefined && pad.num !== null) aliases.add(String(pad.num).trim());
+  if (pad.name !== undefined && pad.name !== null) aliases.add(String(pad.name).trim());
+  aliases.add(String(padIndex + 1));
+  aliases.add(String(padIndex));
+
+  // If comp is an MCU with defined pin table
+  const mcuId = (comp.id || "").toLowerCase();
+  const mcuData = MCU_PINS[mcuId] || MCU_PINS[comp.id];
+  if (mcuData) {
+    const leftPins = mcuData.left || [];
+    const rightPins = mcuData.right || [];
+    let pObj = null;
+    if (padIndex < leftPins.length) {
+      pObj = leftPins[padIndex];
+    } else if (padIndex - leftPins.length < rightPins.length) {
+      pObj = rightPins[padIndex - leftPins.length];
     }
-
-    pinToNetMap.set(key1, netId);
-    pinToNetMap.set(key2, netId);
+    if (pObj) {
+      if (pObj.id) aliases.add(String(pObj.id).trim());
+      if (pObj.label) aliases.add(String(pObj.label).trim());
+      if (pObj.num) aliases.add(String(pObj.num).trim());
+    }
   }
 
-  return { pinToNetMap, totalNets: netCounter - 1 };
+  // If comp has a pins array in definition or instance
+  if (Array.isArray(comp.pins)) {
+    if (comp.pins[padIndex]) {
+      const p = comp.pins[padIndex];
+      if (p.id) aliases.add(String(p.id).trim());
+      if (p.label) aliases.add(String(p.label).trim());
+    }
+    const padNameLow = (pad.name || "").toLowerCase();
+    const padNumLow = (pad.num || "").toLowerCase();
+    for (const p of comp.pins) {
+      const pIdLow = (p.id || "").toLowerCase();
+      const pLblLow = (p.label || "").toLowerCase();
+      if (pIdLow === padNameLow || pLblLow === padNameLow || pIdLow === padNumLow || pLblLow === padNumLow) {
+        if (p.id) aliases.add(String(p.id).trim());
+        if (p.label) aliases.add(String(p.label).trim());
+      }
+    }
+  }
+
+  return Array.from(aliases);
+}
+
+// ── Netlist & Ratsnest Resolver ───────────────────────────────────────────────
+export function buildPcbNetlist(components = [], wires = []) {
+  const dsu = new DisjointSet();
+  const validWires = [];
+
+  for (const rawWire of wires) {
+    const nw = normalizeWire(rawWire);
+    if (!nw) continue;
+    validWires.push(nw);
+
+    const k1 = `${nw.fromComp}:${nw.fromPin}`;
+    const k2 = `${nw.toComp}:${nw.toPin}`;
+    dsu.union(k1, k2);
+  }
+
+  // Assign human-readable net labels (e.g. NET_1, NET_GND, NET_VCC, etc.)
+  const rootToNetId = new Map();
+  let netCounter = 1;
+
+  for (const nw of validWires) {
+    const k1 = `${nw.fromComp}:${nw.fromPin}`;
+    const root = dsu.find(k1);
+    if (!rootToNetId.has(root)) {
+      let suggested = nw.netName;
+      if (!suggested) {
+        const lowerKey = root.toLowerCase();
+        if (lowerKey.includes("gnd")) suggested = "GND";
+        else if (lowerKey.includes("vcc") || lowerKey.includes("5v") || lowerKey.includes("3v3")) suggested = "VCC";
+        else suggested = `NET_${netCounter++}`;
+      }
+      rootToNetId.set(root, suggested);
+    }
+  }
+
+  // Build lookup mapping: any "compId:pinKey" -> canonical netId
+  const pinToNetMap = new Map();
+  for (const nw of validWires) {
+    const k1 = `${nw.fromComp}:${nw.fromPin}`;
+    const k2 = `${nw.toComp}:${nw.toPin}`;
+    const netId = rootToNetId.get(dsu.find(k1));
+    pinToNetMap.set(k1, netId);
+    pinToNetMap.set(k2, netId);
+  }
+
+  return {
+    pinToNetMap,
+    rootToNetId,
+    dsu,
+    totalNets: rootToNetId.size
+  };
 }
 
 /**
  * Generates air-wires (ratsnest dashed lines) between unconnected pads in the same electrical net
  */
-export function generateRatsnestLines(pcbComponents, wires, copperTraces) {
-  const { pinToNetMap } = buildPcbNetlist(pcbComponents, wires);
+export function generateRatsnestLines(pcbComponents = [], wires = [], copperTraces = []) {
+  const { pinToNetMap, dsu } = buildPcbNetlist(pcbComponents, wires);
   const netPads = new Map();
 
   // Find real-world millimeter positions for all pads on PCB board
   for (const comp of pcbComponents) {
     const fp = comp.footprint || getFootprintForComponent(comp);
+    if (!fp || !fp.pads) continue;
+
     const rad = ((comp.rotation || 0) * Math.PI) / 180;
     const cosR = Math.cos(rad);
     const sinR = Math.sin(rad);
 
     for (let idx = 0; idx < fp.pads.length; idx++) {
       const pad = fp.pads[idx];
-      // Match pin by ID or index
-      const pinKey = `${comp.instanceId}:${pad.num || pad.name || idx}`;
-      const netId = pinToNetMap.get(pinKey) || pinToNetMap.get(`${comp.instanceId}:${idx + 1}`);
+      const aliases = getCompPadAliases(comp, pad, idx);
+
+      let netId = null;
+      let matchedKey = null;
+
+      for (const alias of aliases) {
+        const testKey = `${comp.instanceId}:${alias}`;
+        if (pinToNetMap.has(testKey)) {
+          netId = pinToNetMap.get(testKey);
+          matchedKey = testKey;
+          break;
+        }
+        if (dsu.parent.has(testKey)) {
+          const root = dsu.find(testKey);
+          if (root) {
+            netId = pinToNetMap.get(root) || `NET_${root}`;
+            matchedKey = testKey;
+            break;
+          }
+        }
+      }
 
       if (netId) {
-        // Rotate and translate pad relative to component center
-        const worldX = comp.xMm + (pad.x * cosR - pad.y * sinR);
-        const worldY = comp.yMm + (pad.x * sinR + pad.y * cosR);
+        const worldX = Number((comp.xMm + (pad.x * cosR - pad.y * sinR)).toFixed(3));
+        const worldY = Number((comp.yMm + (pad.x * sinR + pad.y * cosR)).toFixed(3));
 
         if (!netPads.has(netId)) {
           netPads.set(netId, []);
         }
         netPads.get(netId).push({
           netId,
-          pinKey,
+          pinKey: matchedKey || `${comp.instanceId}:${pad.num || idx}`,
+          padNum: pad.num,
+          padName: pad.name,
+          compInstId: comp.instanceId,
           xMm: worldX,
           yMm: worldY
         });
@@ -363,22 +587,54 @@ export function generateRatsnestLines(pcbComponents, wires, copperTraces) {
     }
   }
 
-  // Create Minimum Spanning Tree / Star topology lines for each net
+  // Create air-wire ratsnest lines for each electrical net with >= 2 pads
   const ratsnest = [];
   for (const [netId, pads] of netPads.entries()) {
     if (pads.length < 2) continue;
 
-    // Connect sequentially as a chain / star guide
-    for (let i = 0; i < pads.length - 1; i++) {
-      const p1 = pads[i];
-      const p2 = pads[i + 1];
+    // Minimum Spanning Tree (MST) using Prim's algorithm for shortest air-wires
+    const inMst = new Set([0]);
+    const edges = [];
 
-      // Check if already connected by a copper trace
-      const isRouted = copperTraces.some(t => 
-        t.netId === netId &&
-        ((Math.hypot(t.x1 - p1.xMm, t.y1 - p1.yMm) < 1.0 && Math.hypot(t.x2 - p2.xMm, t.y2 - p2.yMm) < 1.0) ||
-         (Math.hypot(t.x1 - p2.xMm, t.y1 - p2.yMm) < 1.0 && Math.hypot(t.x2 - p1.xMm, t.y2 - p1.yMm) < 1.0))
-      );
+    while (inMst.size < pads.length) {
+      let minDist = Infinity;
+      let bestFrom = -1;
+      let bestTo = -1;
+
+      for (const u of inMst) {
+        const p1 = pads[u];
+        for (let v = 0; v < pads.length; v++) {
+          if (inMst.has(v)) continue;
+          const p2 = pads[v];
+          const dist = Math.hypot(p1.xMm - p2.xMm, p1.yMm - p2.yMm);
+          if (dist < minDist) {
+            minDist = dist;
+            bestFrom = u;
+            bestTo = v;
+          }
+        }
+      }
+
+      if (bestTo !== -1) {
+        inMst.add(bestTo);
+        edges.push({ from: pads[bestFrom], to: pads[bestTo] });
+      } else {
+        break;
+      }
+    }
+
+    // Check each MST edge to see if a copper trace already connects the two pads
+    for (const edge of edges) {
+      const p1 = edge.from;
+      const p2 = edge.to;
+
+      const isRouted = copperTraces.some(t => {
+        const d1 = Math.hypot(t.x1 - p1.xMm, t.y1 - p1.yMm);
+        const d2 = Math.hypot(t.x2 - p2.xMm, t.y2 - p2.yMm);
+        const d1Rev = Math.hypot(t.x1 - p2.xMm, t.y1 - p2.yMm);
+        const d2Rev = Math.hypot(t.x2 - p1.xMm, t.y2 - p1.yMm);
+        return (d1 < 1.2 && d2 < 1.2) || (d1Rev < 1.2 && d2Rev < 1.2);
+      });
 
       if (!isRouted) {
         ratsnest.push({
@@ -386,7 +642,9 @@ export function generateRatsnestLines(pcbComponents, wires, copperTraces) {
           x1: p1.xMm,
           y1: p1.yMm,
           x2: p2.xMm,
-          y2: p2.yMm
+          y2: p2.yMm,
+          fromPad: p1,
+          toPad: p2
         });
       }
     }
@@ -444,6 +702,7 @@ M02*
   for (const c of pcbComponents) {
     const fp = c.footprint || getFootprintForComponent(c);
     for (const p of fp.pads) {
+      if (p.layer === "bottom") continue;
       const px = c.xMm + p.x;
       const py = c.yMm + p.y;
       const apt = p.shape === "rect" ? "D20" : "D21";
@@ -467,6 +726,19 @@ M02*
     gbl += `${apt}*\n`;
     gbl += `G00X${formatGerberCoord(t.x1)}Y${formatGerberCoord(t.y1)}D02*\n`;
     gbl += `G01X${formatGerberCoord(t.x2)}Y${formatGerberCoord(t.y2)}D01*\n`;
+  }
+
+  // Flash pads for Bottom Copper (Through-hole pads + Bottom SMD pads)
+  for (const c of pcbComponents) {
+    const fp = c.footprint || getFootprintForComponent(c);
+    for (const p of fp.pads) {
+      if (p.layer === "top") continue;
+      const px = c.xMm + p.x;
+      const py = c.yMm + p.y;
+      const apt = p.shape === "rect" ? "D20" : "D21";
+      gbl += `${apt}*\n`;
+      gbl += `G00X${formatGerberCoord(px)}Y${formatGerberCoord(py)}D03*\n`;
+    }
   }
   gbl += "M02*\n";
 
@@ -503,7 +775,6 @@ G90
 }
 
 function formatGerberCoord(mm) {
-  // 4.4 fixed-point integer string format
   return Math.round(mm * 10000);
 }
 
@@ -515,18 +786,15 @@ function formatDrillCoord(mm) {
 export function exportToEasyEDAJson(board, pcbComponents, copperTraces) {
   const shapes = [];
 
-  // Board outline track
   const w = board.widthMm || 100;
   const h = board.heightMm || 80;
   shapes.push(`TRACK~0.25~10~none~none~0,0 ${w},0 ${w},${h} 0,${h} 0,0~none`);
 
-  // Copper tracks
   for (const t of copperTraces) {
-    const layerId = t.layer === "bottom" ? 2 : 1; // 1 = Top, 2 = Bottom
+    const layerId = t.layer === "bottom" ? 2 : 1;
     shapes.push(`TRACK~${t.widthMm}~${layerId}~${t.netId || "none"}~none~${t.x1},${t.y1} ${t.x2},${t.y2}~none`);
   }
 
-  // Component pads
   for (const c of pcbComponents) {
     const fp = c.footprint || getFootprintForComponent(c);
     for (const p of fp.pads) {
@@ -555,8 +823,6 @@ export function exportToEasyEDAJson(board, pcbComponents, copperTraces) {
 export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer = "bottom", inverted = false) {
   const w = board.widthMm || 100;
   const h = board.heightMm || 80;
-  const wPx = mm2px(w);
-  const hPx = mm2px(h);
 
   const bgColor = inverted ? "#ffffff" : "#000000";
   const copperColor = inverted ? "#000000" : "#ffffff";
@@ -577,17 +843,18 @@ export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer 
   for (const c of pcbComponents) {
     const fp = c.footprint || getFootprintForComponent(c);
     for (const p of fp.pads) {
+      if (layer !== "all" && p.layer && p.layer !== layer && !p.drillMm) continue;
       const px = c.xMm + p.x;
       const py = c.yMm + p.y;
       if (p.shape === "rect") {
-        svg += `    <rect x="${px - p.sizeMm / 2}" y="${py - p.sizeMm / 2}" width="${p.sizeMm}" height="${p.sizeMm}" rx="0.1" />\n`;
+        svg += `    <rect x="${px - (p.sizeMm || 1.6) / 2}" y="${py - (p.sizeMm || 1.6) / 2}" width="${p.sizeMm || 1.6}" height="${p.sizeMm || 1.6}" rx="0.1" />\n`;
       } else {
-        svg += `    <circle cx="${px}" cy="${py}" r="${p.sizeMm / 2}" />\n`;
+        svg += `    <circle cx="${px}" cy="${py}" r="${(p.sizeMm || 1.6) / 2}" />\n`;
       }
     }
   }
 
-  // Draw pad drill hole centers (white hole for drilling guide)
+  // Draw pad drill hole centers (drilling guide)
   svg += `  </g>\n  <g id="drill-holes" fill="${bgColor}">\n`;
   for (const c of pcbComponents) {
     const fp = c.footprint || getFootprintForComponent(c);
@@ -603,4 +870,3 @@ export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer 
   svg += `  </g>\n</svg>`;
   return svg;
 }
-
