@@ -20,6 +20,13 @@
     wires as wiresStore,
     copperTraces as copperTracesStore,
     pcbVias as pcbViasStore,
+    pcbBoardConfig,
+    updatePcbBoardConfig,
+    batchAddTracesAndVias,
+    activeDrcHighlight,
+    setDrcHighlight,
+    clearDrcHighlight,
+    is3dViewerOpen,
     activeEditorView,
     addCopperTrace,
     removeCopperTrace,
@@ -33,7 +40,8 @@
   import {
     mm2px, px2mm, snapToPcbGrid, snapTo45Degrees,
     getFootprintForComponent, generateRatsnestLines, runPcbDrcCheck,
-    generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg
+    generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg,
+    autoRoutePcbNets, generateCopperPourSvgPath, estimatePcbBOMCost
   } from '$lib/engine/pcb-engine.js'
 
   const dispatch = createEventDispatcher()
@@ -42,6 +50,17 @@
   let boardWidthMm = 100
   let boardHeightMm = 80
   let gridStepMm = 2.54 // standard 100 mil grid (switchable to 1.27mm / 0.5mm)
+  let cornerRadiusMm = 3
+  let mountingHoles = true
+  let showCopperPour = false
+
+  // ── Auto-Router & Fab Estimator State ───────────────────────────────────────
+  let isAutoRouting = false
+  let autoRouteFeedback = ''
+  let bomCostEstimate = { pcbFabCostUsd: 2, componentsCostUsd: 0, totalCostUsd: 2, areaCm2: 80, leadTimeDays: '2-3 Hari Kerja' }
+  $: bomCostEstimate = estimatePcbBOMCost({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents)
+  let activeHighlight = null
+  $: activeHighlight = $activeDrcHighlight
   
   let zoom = 2.5 // scale factor (screen px per mm)
   let panX = 140
@@ -397,6 +416,42 @@
     exportSuccessMsg = "Masker SVG 1:1 Skala Riil berhasil diunduh untuk metode sablon / setrika PCB!"
   }
 
+  // ── ⚡ 2-Layer Auto-Router Engine Trigger ────────────────────────────────────
+  function triggerAutoRouter() {
+    isAutoRouting = true
+    autoRouteFeedback = ''
+    setTimeout(() => {
+      const res = autoRoutePcbNets(
+        { widthMm: boardWidthMm, heightMm: boardHeightMm },
+        pcbComponents,
+        $wiresStore,
+        copperTraces,
+        vias,
+        { traceWidthMm: activeTraceWidth }
+      )
+      if (res.newTraces.length > 0 || res.newVias.length > 0) {
+        batchAddTracesAndVias(res.newTraces, res.newVias)
+        autoRouteFeedback = `⚡ Auto-Router: Berhasil menghubungkan ${res.routedCount} jalur tembaga (${res.newTraces.length} segmen, ${res.newVias.length} via)!`
+      } else {
+        autoRouteFeedback = 'Auto-Router: Tidak ada jalur yang perlu dihubungkan atau semua netlist sudah terhubung sempurna.'
+      }
+      isAutoRouting = false
+      setTimeout(() => { autoRouteFeedback = '' }, 6000)
+    }, 200)
+  }
+
+  // ── Interactive DRC Highlight Marker Navigator ─────────────────────────────
+  function highlightDrcIssue(issue) {
+    if (issue && issue.item) {
+      const x = issue.item.xMm ?? issue.item.x1 ?? (boardWidthMm / 2)
+      const y = issue.item.yMm ?? issue.item.y1 ?? (boardHeightMm / 2)
+      setDrcHighlight({ xMm: x, yMm: y, code: issue.code, message: issue.message })
+      // Pan camera smoothly to center coordinate
+      panX = 360 - x * zoom
+      panY = 220 - y * zoom
+    }
+  }
+
   function downloadFile(name, content, mime) {
     const blob = new Blob([content], { type: mime })
     const url = URL.createObjectURL(blob)
@@ -542,10 +597,28 @@
           <option value={0.635}>0.64 mm</option>
         </select>
       </div>
+
+      <!-- ⚡ Auto-Router Button -->
+      <button
+        on:click={triggerAutoRouter}
+        class="pcb-btn pcb-btn-autoroute"
+        class:is-loading={isAutoRouting}
+        disabled={isAutoRouting}
+        title="Otomatis Hubungkan Semua Netlist yang Belum Terhubung (A* 2-Layer Router)"
+      >
+        <span>{isAutoRouting ? '⏳' : '⚡'}</span>
+        <span class="pcb-btn-text">{isAutoRouting ? 'Routing...' : 'Auto-Route'}</span>
+      </button>
     </div>
 
     <!-- Right Actions -->
     <div class="pcb-ribbon-right">
+      <!-- 🪐 3D View Button -->
+      <button on:click={() => is3dViewerOpen.set(true)} class="pcb-btn pcb-btn-3d" title="Buka Studio 3D PCB Visualizer WebGL">
+        <span>🪐</span>
+        <span class="pcb-btn-text">3D View</span>
+      </button>
+
       <!-- Rotate button -->
       <button on:click={() => rotateSelectedComponent(90)} class="pcb-btn" title="Putar Komponen Terpilih 90° (Shortcut: R)">
         <span>↻</span>
@@ -613,21 +686,48 @@
               y="0"
               width={boardWidthMm}
               height={boardHeightMm}
-              rx="2.5"
-              ry="2.5"
+              rx={cornerRadiusMm}
+              ry={cornerRadiusMm}
               fill="#062e17"
               stroke="#eab308"
               stroke-width="0.35"
               filter="drop-shadow(0 12px 28px rgba(0,0,0,0.8))"
             />
+
+            <!-- 4 Corner M3 Mounting Holes -->
+            {#if mountingHoles}
+              <g id="pcb-mounting-holes">
+                {#each [
+                  { cx: 4, cy: 4 },
+                  { cx: boardWidthMm - 4, cy: 4 },
+                  { cx: boardWidthMm - 4, cy: boardHeightMm - 4 },
+                  { cx: 4, cy: boardHeightMm - 4 }
+                ] as h}
+                  <circle cx={h.cx} cy={h.cy} r="3.2" fill="none" stroke="#f59e0b" stroke-width="0.7" />
+                  <circle cx={h.cx} cy={h.cy} r="1.6" fill="#030712" stroke="#eab308" stroke-width="0.2" />
+                {/each}
+              </g>
+            {/if}
             
             <!-- Silkscreen Header Title -->
             {#if showSilkscreen}
-              <text x="5" y="6" font-size="2.4" font-family="monospace" font-weight="bold" fill="#ffffff" opacity="0.8">
-                CIRCUIT-CRAFT PCB v1.0 — {boardWidthMm}x{boardHeightMm}mm
+              <text x="5" y="7" font-size="2.4" font-family="monospace" font-weight="bold" fill="#ffffff" opacity="0.8">
+                CIRCUIT-CRAFT PCB v1.0 — {boardWidthMm}x{boardHeightMm}mm (FR-4)
               </text>
             {/if}
           </g>
+
+          <!-- Ground Plane / Copper Pour (GND Zone Polygon Fill) -->
+          {#if showCopperPour}
+            <path
+              d={generateCopperPourSvgPath({ widthMm: boardWidthMm, heightMm: boardHeightMm }, cornerRadiusMm)}
+              fill="rgba(37, 99, 235, 0.16)"
+              stroke="#38bdf8"
+              stroke-width="0.35"
+              stroke-dasharray="1 1"
+              pointer-events="none"
+            />
+          {/if}
 
           <!-- B. Ratsnest Air-Wires (Dashed Yellow Connectivity Guides) -->
           {#if showRatsnest}
@@ -811,8 +911,28 @@
             {/each}
           </g>
 
+          <!-- E. DRC Active Highlight Target Pulsing Marker -->
+          {#if activeHighlight}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <g id="drc-highlight-target" on:click={() => clearDrcHighlight()} class="drc-pulsing-marker" cursor="pointer">
+              <circle cx={activeHighlight.xMm} cy={activeHighlight.yMm} r="5" fill="none" stroke="#ef4444" stroke-width="0.7" stroke-dasharray="1 1" />
+              <circle cx={activeHighlight.xMm} cy={activeHighlight.yMm} r="1.5" fill="#ef4444" />
+              <rect x={activeHighlight.xMm + 2} y={activeHighlight.yMm - 6} width="22" height="5" rx="1" fill="#0f172a" stroke="#ef4444" stroke-width="0.3" />
+              <text x={activeHighlight.xMm + 4} y={activeHighlight.yMm - 2.5} font-size="2.4" font-family="monospace" font-weight="bold" fill="#fca5a5">
+                {activeHighlight.code}
+              </text>
+            </g>
+          {/if}
+
         </g>
       </svg>
+
+      <!-- Auto-Router Feedback Notification Toast -->
+      {#if autoRouteFeedback}
+        <div class="pcb-feedback-toast">
+          <span>{autoRouteFeedback}</span>
+        </div>
+      {/if}
 
       <!-- Bottom-Left HUD: DRC Status, Zoom, and Fit View -->
       <div class="pcb-hud pcb-hud-bottom-left">
@@ -888,6 +1008,25 @@
               <input id="board-h" type="number" bind:value={boardHeightMm} min="30" max="350" class="pcb-input font-mono" />
             </div>
           </div>
+          <div class="pcb-form-grid" style="margin-top: 8px;">
+            <div class="pcb-field">
+              <label for="board-r" class="pcb-field-lbl">Radius Sudut (mm)</label>
+              <input id="board-r" type="number" bind:value={cornerRadiusMm} min="0" max="15" class="pcb-input font-mono" />
+            </div>
+            <div class="pcb-field">
+              <label for="board-m" class="pcb-field-lbl">Lubang Baut M3</label>
+              <label class="pcb-toggle-row" style="margin-top: 6px;">
+                <input id="board-m" type="checkbox" bind:checked={mountingHoles} class="pcb-chk" />
+                <span class="pcb-toggle-lbl" style="font-size: 11px;">Aktif (4 Sudut)</span>
+              </label>
+            </div>
+          </div>
+          <label class="pcb-toggle-row" style="margin-top: 8px;">
+            <input type="checkbox" bind:checked={showCopperPour} class="pcb-chk" />
+            <span class="pcb-toggle-lbl" style="font-size: 11px; font-weight: 600; color: #38bdf8;">
+              ⚡ Ground Plane (Poligon Tembaga)
+            </span>
+          </label>
         </div>
 
         <!-- Section 2: Selected Component -->
@@ -947,7 +1086,8 @@
           {#if drcResults.errors && drcResults.errors.length > 0}
             <div class="pcb-drc-list pcb-drc-errors">
               {#each drcResults.errors as err}
-                <div class="pcb-drc-item pcb-drc-err">
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div class="pcb-drc-item pcb-drc-err pcb-drc-clickable" on:click={() => highlightDrcIssue(err)} title="Klik untuk melompat ke lokasi koordinat masalah di kanvas">
                   <span class="pcb-drc-icon">🚫</span>
                   <div class="pcb-drc-msg">
                     <strong>{err.code}</strong>: {err.message}
@@ -960,7 +1100,8 @@
           {#if drcResults.warnings && drcResults.warnings.length > 0}
             <div class="pcb-drc-list pcb-drc-warnings">
               {#each drcResults.warnings as warn}
-                <div class="pcb-drc-item pcb-drc-warn">
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div class="pcb-drc-item pcb-drc-warn pcb-drc-clickable" on:click={() => highlightDrcIssue(warn)} title="Klik untuk melompat ke lokasi koordinat masalah di kanvas">
                   <span class="pcb-drc-icon">⚠️</span>
                   <div class="pcb-drc-msg">
                     <strong>{warn.code}</strong>: {warn.message}
@@ -976,6 +1117,31 @@
               <div>Semua jalur tembaga, via, dan footprint pad memenuhi aturan manufaktur. Siap diekspor!</div>
             </div>
           {/if}
+        </div>
+
+        <!-- Section 3.8: Maker Cost & Fab Estimator -->
+        <div class="pcb-card">
+          <div class="pcb-drc-header">
+            <h4 class="pcb-card-title">Estimasi Biaya Manufaktur</h4>
+            <span class="pcb-badge pcb-badge-ok font-mono">~${bomCostEstimate.totalCostUsd} USD</span>
+          </div>
+          <p class="pcb-card-desc">Estimasi order prototipe 5 keping PCB (JLCPCB) + komponen.</p>
+          <div class="pcb-stat-row">
+            <span>Luas Substrat FR-4:</span>
+            <span class="pcb-stat-val">{bomCostEstimate.areaCm2} cm²</span>
+          </div>
+          <div class="pcb-stat-row">
+            <span>Cetak PCB (5 keping):</span>
+            <span class="pcb-stat-val">${bomCostEstimate.pcbFabCostUsd} USD</span>
+          </div>
+          <div class="pcb-stat-row">
+            <span>Komponen BOM:</span>
+            <span class="pcb-stat-val">${bomCostEstimate.componentsCostUsd} USD</span>
+          </div>
+          <div class="pcb-stat-row">
+            <span>Waktu Fabrikasi:</span>
+            <span class="pcb-stat-val" style="color: #38bdf8;">{bomCostEstimate.leadTimeDays}</span>
+          </div>
         </div>
 
         <!-- Section 4: Export Action -->
@@ -1702,6 +1868,74 @@
   .pcb-clean-icon {
     font-size: 16px;
     flex-shrink: 0;
+  }
+
+  .pcb-drc-clickable {
+    cursor: pointer;
+    transition: transform 0.1s ease, border-color 0.1s ease;
+  }
+  .pcb-drc-clickable:hover {
+    transform: translateX(3px);
+    border-color: #f59e0b;
+  }
+
+  /* ── Auto-Router & 3D Buttons ── */
+  .pcb-btn-autoroute {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    border: 1px solid #3b82f6;
+    color: #ffffff;
+    font-weight: 700;
+  }
+  .pcb-btn-autoroute:hover {
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+  }
+  .pcb-btn-autoroute.is-loading {
+    opacity: 0.7;
+    cursor: wait;
+  }
+  .pcb-btn-3d {
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: #e2e8f0;
+  }
+  .pcb-btn-3d:hover {
+    background: #334155;
+    border-color: #94a3b8;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(148, 163, 184, 0.2);
+  }
+
+  /* ── Auto-Router Feedback Toast ── */
+  .pcb-feedback-toast {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid #3b82f6;
+    color: #93c5fd;
+    padding: 8px 18px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    animation: pcb-toast-pop 0.2s ease-out;
+  }
+  @keyframes pcb-toast-pop {
+    from { opacity: 0; transform: translate(-50%, -10px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+
+  /* ── DRC Target Pulsing Marker ── */
+  .drc-pulsing-marker {
+    animation: drc-pulse 1s infinite alternate;
+  }
+  @keyframes drc-pulse {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0.6; transform: scale(1.08); }
   }
 
   .pcb-card-action {

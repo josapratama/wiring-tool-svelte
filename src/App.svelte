@@ -22,12 +22,15 @@
     removeComponent, removeComponents,
     removeWire, removeLabel,
     getAutoSave, clearAutoSave, initAutoSave,
-    renderMode, toggleRenderMode, activeEditorView, setActiveEditorView
+    renderMode, toggleRenderMode, activeEditorView, setActiveEditorView,
+    is3dViewerOpen, isSerialMonitorOpen
   } from '$lib/store/diagram.js'
   import { findCompDef } from '$lib/data/components-db.js'
   import { runERC }      from '$lib/engine/erc.js'
   import { generatePinCode } from '$lib/engine/codegen.js'
   import { generateWokwiDiagram } from '$lib/engine/wokwi.js'
+  import Pcb3dViewerModal from '$lib/components/Pcb3dViewerModal.svelte'
+  import SerialMonitorModal from '$lib/components/SerialMonitorModal.svelte'
   import { onMount }     from 'svelte'
 
   let canvasRef = {}  // filled by Canvas via bind:api
@@ -914,11 +917,21 @@
         <button class="btn btn-sim" on:click={openSimulatorLab} title="Buka Virtual MCU & Circuit Simulator Lab">
           ⚡ <span class="btn-text">Simulator</span>
         </button>
+
+        <!-- Virtual Serial Monitor button -->
+        <button class="btn btn-serial" on:click={() => isSerialMonitorOpen.set(true)} title="Buka Virtual Serial Terminal & 4-CH Logic Analyzer">
+          📟 <span class="btn-text">Serial</span>
+        </button>
       {:else}
         <!-- In PCB Layout mode: Dedicated DRC inspector status -->
         <button class="btn btn-erc" on:click={triggerPcbInspector} title="Buka DRC & Pengecekan Desain PCB">
           🛡️ <span class="btn-text">DRC</span>
           <span class="badge-erc badge-erc-ok">✓ CAD</span>
+        </button>
+
+        <!-- 3D PCB View button -->
+        <button class="btn btn-3d" on:click={() => is3dViewerOpen.set(true)} title="Buka Studio 3D PCB Visualizer WebGL">
+          🪐 <span class="btn-text">3D View</span>
         </button>
       {/if}
 
@@ -1258,6 +1271,16 @@
 
   <!-- Global Sleek Dialog & Confirmation Modal (Replaces browser alert/confirm/prompt) -->
   <DialogModal />
+
+  <!-- 🪐 3D PCB Visualizer WebGL Modal -->
+  {#if $is3dViewerOpen}
+    <Pcb3dViewerModal onClose={() => is3dViewerOpen.set(false)} />
+  {/if}
+
+  <!-- 📟 Virtual Serial Terminal & Logic Analyzer Modal -->
+  {#if $isSerialMonitorOpen}
+    <SerialMonitorModal onClose={() => isSerialMonitorOpen.set(false)} />
+  {/if}
 </div>
 
 <style>

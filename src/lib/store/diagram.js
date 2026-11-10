@@ -39,12 +39,25 @@ export const pcbBoardConfig = writable({
   heightMm: 80,
   thicknessMm: 1.6,
   layerCount: 2,
-  gridStepMm: 2.54
+  gridStepMm: 2.54,
+  cornerRadiusMm: 3,
+  mountingHoles: true,
+  mountingHoleDiaMm: 3.2,
+  copperPourGnd: false,
+  copperPourLayer: "bottom", // 'bottom' | 'top' | 'both'
+  soldermaskColor: "green" // 'green' | 'black' | 'blue' | 'red' | 'white'
 });
 export const copperTraces = writable([]);
 export const pcbVias = writable([]);
 export const activePcbLayer = writable("top"); // 'top' (F.Cu) | 'bottom' (B.Cu)
 export const activeTraceWidthMm = writable(0.40); // 0.25, 0.40, 0.80, 1.20
+export const activeDrcHighlight = writable(null); // { xMm, yMm, code, message } | null
+export const is3dViewerOpen = writable(false);
+export const isSerialMonitorOpen = writable(false);
+export const serialLogs = writable([
+  { time: "00:00:01", type: "sys", text: "ESP32-S3 CAD Virtual Serial Terminal initialized at 115200 baud." },
+  { time: "00:00:02", type: "rx", text: "[BOOT] System ready. Clock 240MHz. Flash 16MB. PSRAM 8MB." }
+]);
 
 export function setRenderMode(mode) {
   renderMode.set(mode === "schematic" ? "schematic" : "realistic");
@@ -98,6 +111,39 @@ export function removePcbVia(viaId) {
 export function clearPcbVias() {
   pushHistory();
   pcbVias.set([]);
+}
+
+export function batchAddTracesAndVias(newTraces = [], newVias = []) {
+  if (newTraces.length === 0 && newVias.length === 0) return;
+  pushHistory();
+  if (newTraces.length > 0) {
+    copperTraces.update(traces => [...traces, ...newTraces]);
+  }
+  if (newVias.length > 0) {
+    pcbVias.update(vias => [...vias, ...newVias]);
+  }
+}
+
+export function updatePcbBoardConfig(patch) {
+  pcbBoardConfig.update(cfg => ({ ...cfg, ...patch }));
+}
+
+export function setDrcHighlight(highlight) {
+  activeDrcHighlight.set(highlight);
+}
+
+export function clearDrcHighlight() {
+  activeDrcHighlight.set(null);
+}
+
+export function appendSerialLog(type, text) {
+  const now = new Date();
+  const time = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+  serialLogs.update(logs => [...logs.slice(-300), { time, type, text }]);
+}
+
+export function clearSerialLogs() {
+  serialLogs.set([]);
 }
 
 export const sheetConfig = writable({

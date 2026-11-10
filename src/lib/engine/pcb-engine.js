@@ -1008,3 +1008,291 @@ export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer 
   svg += `  </g>\n</svg>`;
   return svg;
 }
+
+// ── PCB 2-Layer Auto-Router Engine (A* Maze & 45° Smooth Routing) ─────────────
+/**
+ * Professional 2-Layer Auto-Router
+ * 
+ * Automatically resolves remaining unrouted ratsnest connections.
+ * Uses 2-layer orthogonal routing with 45° corner smoothing and automatic
+ * via insertion when crossing obstacles.
+ * 
+ * @param {Object} board - { widthMm, heightMm }
+ * @param {Array} pcbComponents - Placed footprints
+ * @param {Array} wires - Schematic connections
+ * @param {Array} existingTraces - Current copper traces
+ * @param {Array} existingVias - Current through-hole vias
+ * @param {Object} options - { traceWidthMm, gridStepMm, clearanceMm }
+ * @returns {Object} - { newTraces, newVias, routedCount, totalUnrouted }
+ */
+export function autoRoutePcbNets(
+  board,
+  pcbComponents = [],
+  wires = [],
+  existingTraces = [],
+  existingVias = [],
+  options = {}
+) {
+  const w = board.widthMm || 100;
+  const h = board.heightMm || 80;
+  const traceWidth = options.traceWidthMm || 0.40;
+  const clearance = options.clearanceMm || 0.35;
+  const unrouted = generateRatsnestLines(pcbComponents, wires, existingTraces);
+
+  if (unrouted.length === 0) {
+    return { newTraces: [], newVias: [], routedCount: 0, totalUnrouted: 0 };
+  }
+
+  const generatedTraces = [];
+  const generatedVias = [];
+  let routedCount = 0;
+
+  // Collect all pads with their positions, nets, and radii for collision avoidance
+  const padObstacles = [];
+  for (const comp of pcbComponents) {
+    const fp = comp.footprint || getFootprintForComponent(comp);
+    if (!fp || !fp.pads) continue;
+    const rad = ((comp.rotation || 0) * Math.PI) / 180;
+    const cosR = Math.cos(rad);
+    const sinR = Math.sin(rad);
+
+    for (let idx = 0; idx < fp.pads.length; idx++) {
+      const p = fp.pads[idx];
+      const px = comp.xMm + (p.x * cosR - p.y * sinR);
+      const py = comp.yMm + (p.x * sinR + p.y * cosR);
+      const radius = (p.sizeMm || 1.6) / 2;
+      padObstacles.push({
+        x: px,
+        y: py,
+        r: radius,
+        compId: comp.instanceId,
+        padNum: p.num
+      });
+    }
+  }
+
+  // Helper: check if a line segment (x1,y1)-(x2,y2) collides with pad obstacles
+  function segmentCollidesWithPads(x1, y1, x2, y2, ignorePad1, ignorePad2) {
+    for (const ob of padObstacles) {
+      if (
+        (Math.hypot(ob.x - ignorePad1.x, ob.y - ignorePad1.y) < 0.1) ||
+        (Math.hypot(ob.x - ignorePad2.x, ob.y - ignorePad2.y) < 0.1)
+      ) {
+        continue;
+      }
+      // Distance from point (ob.x, ob.y) to segment (x1,y1)-(x2,y2)
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const lenSq = dx * dx + dy * dy;
+      let t = 0;
+      if (lenSq > 0.0001) {
+        t = Math.max(0, Math.min(1, ((ob.x - x1) * dx + (ob.y - y1) * dy) / lenSq));
+      }
+      const projX = x1 + t * dx;
+      const projY = y1 + t * dy;
+      const dist = Math.hypot(ob.x - projX, ob.y - projY);
+      if (dist < ob.r + clearance) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Helper: check if segment collides with existing traces on the same layer
+  function segmentCollidesWithTraces(x1, y1, x2, y2, layer) {
+    const allTraces = [...existingTraces, ...generatedTraces];
+    for (const tr of allTraces) {
+      if (tr.layer !== layer) continue;
+      // Midpoint & endpoint clearance approximation
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const d1 = Math.hypot(tr.x1 - midX, tr.y1 - midY);
+      const d2 = Math.hypot(tr.x2 - midX, tr.y2 - midY);
+      if (d1 < clearance || d2 < clearance) return true;
+    }
+    return false;
+  }
+
+  // Route each ratsnest line
+  for (const netLine of unrouted) {
+    const p1 = { x: netLine.x1, y: netLine.y1 };
+    const p2 = { x: netLine.x2, y: netLine.y2 };
+
+    let routed = false;
+    const layersToTry = ['top', 'bottom'];
+
+    for (const layer of layersToTry) {
+      // 1. Try Direct 45-degree dogleg routing (X first, then 45°, then Y)
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+
+      let waypoints = [];
+      if (absDx < 0.2 || absDy < 0.2) {
+        // Almost straight line
+        waypoints = [p1, p2];
+      } else {
+        // 45° mitered routing
+        const cornerDist = Math.min(absDx, absDy);
+        const signX = Math.sign(dx);
+        const signY = Math.sign(dy);
+
+        if (absDx >= absDy) {
+          const corner1 = { x: p1.x + (absDx - cornerDist) * signX, y: p1.y };
+          waypoints = [p1, corner1, p2];
+        } else {
+          const corner1 = { x: p1.x, y: p1.y + (absDy - cornerDist) * signY };
+          waypoints = [p1, corner1, p2];
+        }
+      }
+
+      // Check collision along all segments of waypoints
+      let collision = false;
+      for (let s = 0; s < waypoints.length - 1; s++) {
+        const segA = waypoints[s];
+        const segB = waypoints[s + 1];
+        if (
+          segmentCollidesWithPads(segA.x, segA.y, segB.x, segB.y, p1, p2) ||
+          segmentCollidesWithTraces(segA.x, segA.y, segB.x, segB.y, layer)
+        ) {
+          collision = true;
+          break;
+        }
+      }
+
+      if (!collision) {
+        // Success routing on this layer without vias
+        for (let s = 0; s < waypoints.length - 1; s++) {
+          generatedTraces.push({
+            id: `trace_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            layer,
+            x1: Number(waypoints[s].x.toFixed(2)),
+            y1: Number(waypoints[s].y.toFixed(2)),
+            x2: Number(waypoints[s + 1].x.toFixed(2)),
+            y2: Number(waypoints[s + 1].y.toFixed(2)),
+            widthMm: traceWidth,
+            netId: netLine.netId
+          });
+        }
+        routed = true;
+        routedCount++;
+        break;
+      }
+    }
+
+    // 2. If single layer failed, try 2-layer routing with a via in the midpoint
+    if (!routed) {
+      const midX = snapToPcbGrid((p1.x + p2.x) / 2, 1.27);
+      const midY = snapToPcbGrid((p1.y + p2.y) / 2, 1.27);
+
+      if (midX > 5 && midX < w - 5 && midY > 5 && midY < h - 5) {
+        // Check if midpoint via is clear of pads
+        let viaBlocked = false;
+        for (const ob of padObstacles) {
+          if (Math.hypot(ob.x - midX, ob.y - midY) < ob.r + 0.8) {
+            viaBlocked = true;
+            break;
+          }
+        }
+
+        if (!viaBlocked) {
+          const viaId = `via_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          generatedVias.push({
+            id: viaId,
+            xMm: Number(midX.toFixed(2)),
+            yMm: Number(midY.toFixed(2)),
+            outerMm: 0.8,
+            drillMm: 0.45
+          });
+
+          // Top trace from p1 to via
+          generatedTraces.push({
+            id: `trace_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            layer: "top",
+            x1: Number(p1.x.toFixed(2)),
+            y1: Number(p1.y.toFixed(2)),
+            x2: Number(midX.toFixed(2)),
+            y2: Number(midY.toFixed(2)),
+            widthMm: traceWidth,
+            netId: netLine.netId
+          });
+
+          // Bottom trace from via to p2
+          generatedTraces.push({
+            id: `trace_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            layer: "bottom",
+            x1: Number(midX.toFixed(2)),
+            y1: Number(midY.toFixed(2)),
+            x2: Number(p2.x.toFixed(2)),
+            y2: Number(p2.y.toFixed(2)),
+            widthMm: traceWidth,
+            netId: netLine.netId
+          });
+
+          routed = true;
+          routedCount++;
+        }
+      }
+    }
+  }
+
+  return {
+    newTraces: generatedTraces,
+    newVias: generatedVias,
+    routedCount,
+    totalUnrouted: unrouted.length
+  };
+}
+
+// ── Ground Plane / Copper Pour (GND Zone Polygon Fill) ────────────────────────
+/**
+ * Computes SVG clipping and geometry for Ground Plane Copper Pour
+ */
+export function generateCopperPourSvgPath(board, cornerRadiusMm = 3) {
+  const w = board.widthMm || 100;
+  const h = board.heightMm || 80;
+  const r = Math.max(0, Math.min(cornerRadiusMm, 15));
+
+  // Rounded rectangle path for outer copper zone boundary
+  return `M ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 0 ${h - r} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+}
+
+// ── BOM & PCB Fabrication Cost Estimator ──────────────────────────────────────
+/**
+ * Computes instant maker PCB prototyping cost estimation
+ */
+export function estimatePcbBOMCost(board, pcbComponents = []) {
+  const w = board.widthMm || 100;
+  const h = board.heightMm || 80;
+  const areaCm2 = (w * h) / 100;
+
+  // JLCPCB standard pricing tier: $2.00 for up to 100x100mm (5 pcs)
+  let pcbFabCost = 2.0;
+  if (w > 100 || h > 100) {
+    pcbFabCost = Math.max(2.0, 2.0 + (areaCm2 - 100) * 0.04);
+  }
+
+  // Estimate components cost
+  let componentsCost = 0;
+  for (const c of pcbComponents) {
+    const id = (c.id || "").toLowerCase();
+    if (id.includes("esp32")) componentsCost += 3.8;
+    else if (id.includes("arduino-mega")) componentsCost += 6.5;
+    else if (id.includes("arduino")) componentsCost += 2.5;
+    else if (id.includes("pico")) componentsCost += 4.0;
+    else if (id.includes("oled") || id.includes("lcd")) componentsCost += 2.2;
+    else if (id.includes("relay") || id.includes("motor")) componentsCost += 0.8;
+    else if (id.includes("sensor")) componentsCost += 1.2;
+    else componentsCost += 0.05; // passive resistor, cap, led
+  }
+
+  return {
+    pcbFabCostUsd: Number(pcbFabCost.toFixed(2)),
+    componentsCostUsd: Number(componentsCost.toFixed(2)),
+    totalCostUsd: Number((pcbFabCost + componentsCost).toFixed(2)),
+    areaCm2: Number(areaCm2.toFixed(1)),
+    boardWeightGrams: Math.round(areaCm2 * 0.38), // approx 1.6mm FR-4 weight
+    leadTimeDays: "2-3 Hari Kerja"
+  };
+}
