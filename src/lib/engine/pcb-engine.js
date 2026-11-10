@@ -654,7 +654,7 @@ export function generateRatsnestLines(pcbComponents = [], wires = [], copperTrac
 }
 
 // ── Gerber RS-274X Standard Output Generator ──────────────────────────────────
-export function generateGerberRS274X(board, pcbComponents, copperTraces) {
+export function generateGerberRS274X(board, pcbComponents, copperTraces, vias = []) {
   const timestamp = new Date().toISOString();
   const w = board.widthMm || 100;
   const h = board.heightMm || 80;
@@ -689,6 +689,7 @@ M02*
 %ADD12C,0.8000*%
 %ADD20R,1.6000X1.6000*%
 %ADD21C,1.6000*%
+%ADD22C,0.8000*%
 `;
 
   for (const t of copperTraces.filter(tr => tr.layer === "top")) {
@@ -710,6 +711,12 @@ M02*
       gtl += `G00X${formatGerberCoord(px)}Y${formatGerberCoord(py)}D03*\n`;
     }
   }
+
+  // Flash vias for Top Copper
+  for (const v of vias) {
+    gtl += `D22*\n`;
+    gtl += `G00X${formatGerberCoord(v.xMm)}Y${formatGerberCoord(v.yMm)}D03*\n`;
+  }
   gtl += "M02*\n";
 
   // 3. Bottom Copper (B.Cu)
@@ -719,6 +726,7 @@ M02*
 %ADD12C,0.8000*%
 %ADD20R,1.6000X1.6000*%
 %ADD21C,1.6000*%
+%ADD22C,0.8000*%
 `;
 
   for (const t of copperTraces.filter(tr => tr.layer === "bottom")) {
@@ -740,6 +748,12 @@ M02*
       gbl += `G00X${formatGerberCoord(px)}Y${formatGerberCoord(py)}D03*\n`;
     }
   }
+
+  // Flash vias for Bottom Copper
+  for (const v of vias) {
+    gbl += `D22*\n`;
+    gbl += `G00X${formatGerberCoord(v.xMm)}Y${formatGerberCoord(v.yMm)}D03*\n`;
+  }
   gbl += "M02*\n";
 
   // 4. Excellon Drill File (NC Drill)
@@ -749,6 +763,7 @@ M02*
 METRIC,TZ
 T01C0.850
 T02C1.000
+T03C0.450
 %
 G90
 `;
@@ -762,6 +777,13 @@ G90
         const py = c.yMm + p.y;
         drl += `X${formatDrillCoord(px)}Y${formatDrillCoord(py)}\n`;
       }
+    }
+  }
+
+  if (vias.length > 0) {
+    drl += `T03\n`;
+    for (const v of vias) {
+      drl += `X${formatDrillCoord(v.xMm)}Y${formatDrillCoord(v.yMm)}\n`;
     }
   }
   drl += "M30\n";
@@ -783,7 +805,7 @@ function formatDrillCoord(mm) {
 }
 
 // ── EasyEDA Source JSON Serializer ─────────────────────────────────────────────
-export function exportToEasyEDAJson(board, pcbComponents, copperTraces) {
+export function exportToEasyEDAJson(board, pcbComponents, copperTraces, vias = []) {
   const shapes = [];
 
   const w = board.widthMm || 100;
@@ -793,6 +815,10 @@ export function exportToEasyEDAJson(board, pcbComponents, copperTraces) {
   for (const t of copperTraces) {
     const layerId = t.layer === "bottom" ? 2 : 1;
     shapes.push(`TRACK~${t.widthMm}~${layerId}~${t.netId || "none"}~none~${t.x1},${t.y1} ${t.x2},${t.y2}~none`);
+  }
+
+  for (const v of vias) {
+    shapes.push(`VIA~${v.xMm}~${v.yMm}~${v.outerMm || 0.8}~none~${v.drillMm || 0.45}~none~none`);
   }
 
   for (const c of pcbComponents) {
@@ -820,7 +846,7 @@ export function exportToEasyEDAJson(board, pcbComponents, copperTraces) {
 }
 
 // ── 1:1 Scale DIY Etching SVG Mask ────────────────────────────────────────────
-export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer = "bottom", inverted = false) {
+export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer = "bottom", inverted = false, vias = []) {
   const w = board.widthMm || 100;
   const h = board.heightMm || 80;
 
@@ -838,7 +864,7 @@ export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer 
     svg += `    <line x1="${t.x1}" y1="${t.y1}" x2="${t.x2}" y2="${t.y2}" stroke-width="${t.widthMm}" />\n`;
   }
 
-  // Draw pads
+  // Draw pads and vias
   svg += `  </g>\n  <g id="pads" fill="${copperColor}">\n`;
   for (const c of pcbComponents) {
     const fp = c.footprint || getFootprintForComponent(c);
@@ -854,6 +880,11 @@ export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer 
     }
   }
 
+  // Draw via copper rings
+  for (const v of vias) {
+    svg += `    <circle cx="${v.xMm}" cy="${v.yMm}" r="${(v.outerMm || 0.8) / 2}" />\n`;
+  }
+
   // Draw pad drill hole centers (drilling guide)
   svg += `  </g>\n  <g id="drill-holes" fill="${bgColor}">\n`;
   for (const c of pcbComponents) {
@@ -865,6 +896,11 @@ export function generateDiyEtchingSvg(board, pcbComponents, copperTraces, layer 
         svg += `    <circle cx="${px}" cy="${py}" r="${p.drillMm / 2}" />\n`;
       }
     }
+  }
+
+  // Draw via drill holes
+  for (const v of vias) {
+    svg += `    <circle cx="${v.xMm}" cy="${v.yMm}" r="${(v.drillMm || 0.45) / 2}" />\n`;
   }
 
   svg += `  </g>\n</svg>`;

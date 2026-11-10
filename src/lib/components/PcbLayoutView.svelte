@@ -239,7 +239,13 @@
   }
 
   function rotateSelectedComponent(deg = 90) {
-    if (!selectedCompId) return
+    if (!selectedCompId) {
+      if (pcbComponents.length > 0) {
+        selectedCompId = pcbComponents[0].instanceId
+      } else {
+        return
+      }
+    }
     const comp = pcbComponents.find(c => c.instanceId === selectedCompId)
     if (comp) {
       comp.rotation = ((comp.rotation || 0) + deg) % 360
@@ -287,6 +293,43 @@
   }
 
   function handleCanvasClick(e) {
+    if (activeTool === 'via') {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const mouseSvgX = (e.clientX - rect.left - panX) / zoom
+      const mouseSvgY = (e.clientY - rect.top - panY) / zoom
+      const mmX = snapToPcbGrid(mouseSvgX, gridStepMm)
+      const mmY = snapToPcbGrid(mouseSvgY, gridStepMm)
+
+      if (mmX >= 0 && mmX <= boardWidthMm && mmY >= 0 && mmY <= boardHeightMm) {
+        const newVia = {
+          id: `via_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          xMm: mmX,
+          yMm: mmY,
+          outerMm: 0.8,
+          drillMm: 0.45
+        }
+        vias = [...vias, newVia]
+
+        if (routingStart) {
+          copperTraces.push({
+            id: `trace_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            layer: activeLayer,
+            x1: routingStart.xMm,
+            y1: routingStart.yMm,
+            x2: mmX,
+            y2: mmY,
+            widthMm: activeTraceWidth
+          })
+          copperTraces = [...copperTraces]
+          activeLayer = activeLayer === 'top' ? 'bottom' : 'top'
+          routingStart = { xMm: mmX, yMm: mmY }
+          routingCurrent = { xMm: mmX, yMm: mmY }
+        }
+        updateRatsnest()
+      }
+      return
+    }
+
     if (activeTool === 'route' && routingStart && routingCurrent) {
       // Place an intermediate corner waypoint
       copperTraces.push({
@@ -320,6 +363,7 @@
   function deleteSelectedTrace() {
     if (selectedTraceId) {
       copperTraces = copperTraces.filter(t => t.id !== selectedTraceId)
+      vias = vias.filter(v => v.id !== selectedTraceId)
       selectedTraceId = null
       updateRatsnest()
     }
@@ -335,7 +379,7 @@
 
   // ── Gerber & Export Triggers ────────────────────────────────────────────────
   function triggerGerberDownload() {
-    const gerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces)
+    const gerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias)
     for (const [filename, content] of Object.entries(gerbers)) {
       downloadFile(filename, content, "text/plain")
     }
@@ -343,13 +387,13 @@
   }
 
   function triggerEasyEdaExport() {
-    const jsonDoc = exportToEasyEDAJson({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces)
+    const jsonDoc = exportToEasyEDAJson({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias)
     downloadFile("easyeda_pcb_project.json", JSON.stringify(jsonDoc, null, 2), "application/json")
     exportSuccessMsg = "File EasyEDA Source JSON berhasil diunduh! Siap dibuka di EasyEDA Editor."
   }
 
   function triggerEtchingSvgExport(layer = 'bottom', inverted = false) {
-    const svgStr = generateDiyEtchingSvg({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, layer, inverted)
+    const svgStr = generateDiyEtchingSvg({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, layer, inverted, vias)
     downloadFile(`pcb_diy_etching_${layer}.svg`, svgStr, "image/svg+xml")
     exportSuccessMsg = "Masker SVG 1:1 Skala Riil berhasil diunduh untuk metode sablon / setrika PCB!"
   }
@@ -383,6 +427,8 @@
       activeTool = 'select'
     } else if (e.key === 'x' || e.key === 'X') {
       activeTool = 'route'
+    } else if (e.key === 'o' || e.key === 'O') {
+      activeTool = 'via'
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       deleteSelectedTrace()
     }
@@ -414,8 +460,7 @@
       <!-- Studio Badge -->
       <div class="pcb-title-wrap">
         <span class="pcb-title-icon">🟩</span>
-        <span class="pcb-title-text">PCB Layout Studio</span>
-        <span class="pcb-engine-badge">EasyEDA Engine</span>
+        <span class="pcb-title-text">PCB Studio</span>
       </div>
     </div>
 
@@ -439,14 +484,14 @@
           title="Tarik Jalur Tembaga / Route Trace 45° (Shortcut: X)"
         >
           <span>⚡</span>
-          <span class="pcb-tool-lbl">Route Trace</span>
+          <span class="pcb-tool-lbl">Route</span>
         </button>
 
         <button
           class="pcb-tool-btn"
           class:pcb-tool-active={activeTool === 'via'}
           on:click={() => activeTool = 'via'}
-          title="Letakkan Via Lubang Tembus"
+          title="Letakkan Via Lubang Tembus (Shortcut: O)"
         >
           <span>◎</span>
           <span class="pcb-tool-lbl">Via</span>
@@ -483,9 +528,9 @@
         <span class="pcb-select-label">Lebar:</span>
         <select bind:value={activeTraceWidth} class="pcb-select">
           <option value={0.25}>0.25 mm (Sinyal)</option>
-          <option value={0.40}>0.40 mm (Standar IC)</option>
-          <option value={0.80}>0.80 mm (Daya / VCC)</option>
-          <option value={1.20}>1.20 mm (GND Berat)</option>
+          <option value={0.40}>0.40 mm (Standar)</option>
+          <option value={0.80}>0.80 mm (Daya)</option>
+          <option value={1.20}>1.20 mm (GND)</option>
         </select>
       </div>
 
@@ -493,9 +538,9 @@
       <div class="pcb-select-wrap" title="Ukuran Grid Snapping CAD">
         <span class="pcb-select-label">Grid:</span>
         <select bind:value={gridStepMm} class="pcb-select">
-          <option value={2.54}>2.54 mm (100 mil)</option>
-          <option value={1.27}>1.27 mm (50 mil)</option>
-          <option value={0.635}>0.635 mm (25 mil)</option>
+          <option value={2.54}>2.54 mm</option>
+          <option value={1.27}>1.27 mm</option>
+          <option value={0.635}>0.64 mm</option>
         </select>
       </div>
     </div>
@@ -505,13 +550,13 @@
       <!-- Rotate button -->
       <button on:click={() => rotateSelectedComponent(90)} class="pcb-btn" title="Putar Komponen Terpilih 90° (Shortcut: R)">
         <span>↻</span>
-        <span class="pcb-btn-text">Putar 90°</span>
+        <span class="pcb-btn-text">Putar</span>
       </button>
 
       <!-- Toggle Inspector -->
       <button
         on:click={() => showInspector = !showInspector}
-        class="pcb-btn"
+        class="pcb-btn pcb-btn-inspector"
         class:pcb-btn-active={showInspector}
         title="Buka / Tutup Panel Inspektur PCB"
       >
@@ -630,7 +675,33 @@
             </g>
           {/if}
 
-          <!-- E. Active In-Progress Routing Line -->
+          <!-- E. Plated Through-Hole Vias (Connecting Top & Bottom Layers) -->
+          <g id="vias-layer">
+            {#each vias as via (via.id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+              <g
+                class="pcb-via"
+                on:click={(e) => { e.stopPropagation(); selectedTraceId = via.id; selectedCompId = null; }}
+              >
+                <!-- Annular copper ring -->
+                <circle
+                  cx={via.xMm} cy={via.yMm}
+                  r={(via.outerMm || 0.8) / 2}
+                  fill={selectedTraceId === via.id ? "#38bdf8" : "#f59e0b"}
+                  stroke="#d97706"
+                  stroke-width="0.08"
+                />
+                <!-- Drill hole through substrate -->
+                <circle
+                  cx={via.xMm} cy={via.yMm}
+                  r={(via.drillMm || 0.45) / 2}
+                  fill="#090d16"
+                />
+              </g>
+            {/each}
+          </g>
+
+          <!-- F. Active In-Progress Routing Line -->
           {#if routingStart && routingCurrent}
             <line
               x1={routingStart.xMm} y1={routingStart.yMm} x2={routingCurrent.xMm} y2={routingCurrent.yMm}
@@ -979,35 +1050,34 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 12px;
+    padding: 0 10px;
     gap: 8px;
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     z-index: 30;
     overflow-x: auto;
+    overflow-y: hidden;
   }
   .pcb-ribbon::-webkit-scrollbar { display: none; }
 
   .pcb-ribbon-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-shrink: 0;
   }
 
   .pcb-ribbon-center {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex: 1;
-    justify-content: center;
-    min-width: 0;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .pcb-ribbon-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
   }
 
@@ -1028,17 +1098,6 @@
     font-weight: 700;
     color: #ffffff;
     letter-spacing: -0.2px;
-  }
-  .pcb-engine-badge {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    font-size: 9.5px;
-    font-weight: 700;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-family: monospace;
-    letter-spacing: 0.4px;
   }
 
   /* Buttons */
@@ -1231,9 +1290,18 @@
     padding: 3px 6px;
     outline: none;
     cursor: pointer;
+    max-width: 115px;
   }
   .pcb-select:focus {
     border-color: #38bdf8;
+  }
+
+  .pcb-via {
+    cursor: pointer;
+  }
+  .pcb-via:hover circle:first-child {
+    stroke: #38bdf8;
+    stroke-width: 0.15;
   }
 
   /* ── Body & Canvas ── */
@@ -1675,7 +1743,7 @@
       padding: 0 8px;
       gap: 6px;
     }
-    .pcb-btn-text, .pcb-title-text, .pcb-engine-badge, .pcb-select-label {
+    .pcb-btn-text, .pcb-title-text, .pcb-select-label {
       display: none;
     }
     .pcb-hud-top-right {

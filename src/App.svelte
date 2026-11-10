@@ -209,7 +209,7 @@
   }
 
   function exportPNG() {
-    const svg = document.querySelector('.canvas-wrap svg')
+    const svg = document.querySelector('.canvas-wrap svg') || document.querySelector('.pcb-svg')
     if (!svg) return
     const rect = svg.getBoundingClientRect()
     const clone = svg.cloneNode(true)
@@ -246,7 +246,7 @@
 
   // Feature #1: Export SVG
   function exportSVG() {
-    const svg = document.querySelector('.canvas-wrap svg')
+    const svg = document.querySelector('.canvas-wrap svg') || document.querySelector('.pcb-svg')
     if (!svg) return
     const clone = svg.cloneNode(true)
     const bg = isLightMode ? '#ffffff' : '#0d0d1a'
@@ -255,6 +255,26 @@
     const s = new XMLSerializer().serializeToString(clone)
     dl(s, (projectName||'wiring')+'.svg', 'image/svg+xml')
     flash('SVG exported ✓')
+  }
+
+  function triggerPcbExport() {
+    if (get(activeEditorView) !== 'pcb') {
+      setActiveEditorView('pcb')
+    }
+    setTimeout(() => {
+      const pcbExportBtn = document.querySelector('.pcb-btn-export')
+      if (pcbExportBtn) pcbExportBtn.click()
+    }, 120)
+  }
+
+  function triggerPcbInspector() {
+    if (get(activeEditorView) !== 'pcb') {
+      setActiveEditorView('pcb')
+    }
+    setTimeout(() => {
+      const inspectorBtn = document.querySelector('.pcb-btn-inspector')
+      if (inspectorBtn) inspectorBtn.click()
+    }, 120)
   }
 
   // Feature #F1: Export Netlist as CSV
@@ -611,6 +631,19 @@
       </div>
       <span class="cad-tag">{$activeEditorView === 'pcb' ? 'PCB' : 'SCH'}</span>
 
+      <!-- Compact Editable Project Name -->
+      <div class="proj-name-wrap" title="Klik untuk mengubah nama proyek">
+        <!-- svelte-ignore a11y-interactive-supports-focus -->
+        <span
+          class="proj-name"
+          contenteditable="true"
+          role="textbox"
+          aria-label="Project name"
+          on:blur={e => projectName = e.target.textContent.trim()}
+          on:keydown={e => e.key==='Enter' && e.target.blur()}
+        >{projectName}</span>
+      </div>
+
       <!-- Mode Switcher: Schematic & Wiring vs PCB Layout -->
       <div class="cad-mode-switcher">
         <button
@@ -852,20 +885,6 @@
       </nav>
     </div>
 
-    <!-- Center: Project Title -->
-    <div class="cad-ribbon-center">
-      <!-- svelte-ignore a11y-interactive-supports-focus -->
-      <span
-        class="proj-name"
-        contenteditable="true"
-        role="textbox"
-        aria-label="Project name"
-        title="Klik untuk mengubah nama proyek"
-        on:blur={e => projectName = e.target.textContent.trim()}
-        on:keydown={e => e.key==='Enter' && e.target.blur()}
-      >{projectName}</span>
-    </div>
-
     <!-- Right: Status, Code, Export, Properties -->
     <div class="cad-ribbon-right">
       <!-- Search Palette -->
@@ -873,31 +892,39 @@
         🔍 <span class="shortcut-tag">Ctrl+K</span>
       </button>
 
-      <!-- Realtime ERC status button -->
-      <button class="btn btn-erc" on:click={() => showERCModal = true} title="Electrical Rules Check (ERC)">
-        ⚡ ERC
-        {#if ercResult.errors.length > 0}
-          <span class="badge-erc badge-erc-err">🚨 {ercResult.errors.length}</span>
-        {:else if ercResult.warnings.length > 0}
-          <span class="badge-erc badge-erc-warn">⚠️ {ercResult.warnings.length}</span>
-        {:else}
-          <span class="badge-erc badge-erc-ok">✓ OK</span>
-        {/if}
-      </button>
+      {#if $activeEditorView === 'wiring'}
+        <!-- Realtime ERC status button -->
+        <button class="btn btn-erc" on:click={() => showERCModal = true} title="Electrical Rules Check (ERC)">
+          ⚡ <span class="btn-text">ERC</span>
+          {#if ercResult.errors.length > 0}
+            <span class="badge-erc badge-erc-err">🚨 {ercResult.errors.length}</span>
+          {:else if ercResult.warnings.length > 0}
+            <span class="badge-erc badge-erc-warn">⚠️ {ercResult.warnings.length}</span>
+          {:else}
+            <span class="badge-erc badge-erc-ok">✓ OK</span>
+          {/if}
+        </button>
 
-      <!-- Code generator button -->
-      <button class="btn btn-code" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
-        💻 <span class="btn-text">Code</span>
-      </button>
+        <!-- Code generator button -->
+        <button class="btn btn-code" on:click={() => showCodeGenModal = true} title="Generate C++ / Python pin headers">
+          💻 <span class="btn-text">Code</span>
+        </button>
 
-      <!-- Simulator Lab button -->
-      <button class="btn btn-sim" on:click={openSimulatorLab} title="Buka Virtual MCU & Circuit Simulator Lab">
-        ⚡ <span class="btn-text">Simulator</span>
-      </button>
+        <!-- Simulator Lab button -->
+        <button class="btn btn-sim" on:click={openSimulatorLab} title="Buka Virtual MCU & Circuit Simulator Lab">
+          ⚡ <span class="btn-text">Simulator</span>
+        </button>
+      {:else}
+        <!-- In PCB Layout mode: Dedicated DRC inspector status -->
+        <button class="btn btn-erc" on:click={triggerPcbInspector} title="Buka DRC & Pengecekan Desain PCB">
+          🛡️ <span class="btn-text">DRC</span>
+          <span class="badge-erc badge-erc-ok">✓ CAD</span>
+        </button>
+      {/if}
 
       <!-- Export Dropdown -->
       <div class="dropdown-wrap">
-        <button class="btn btn-pri" on:click={toggleExportMenu} title="Export diagram to multiple formats">
+        <button class="btn btn-pri" on:click={toggleExportMenu} title="Export diagram & fabrikasi">
           📤 <span class="btn-text">Export</span> <span class="arrow-down">▾</span>
         </button>
 
@@ -905,6 +932,14 @@
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
           <div class="export-dropdown" on:click|stopPropagation>
             <div class="dd-title">Pilih Format Ekspor</div>
+            <button class="dd-item" on:click={() => { triggerPcbExport(); showExportMenu = false }}>
+              <span class="dd-icon">📦</span>
+              <div class="dd-info">
+                <span class="dd-label">Ekspor Fabrikasi PCB (Gerber RS-274X)</span>
+                <span class="dd-desc">Arsip ZIP standar JLCPCB / PCBWay</span>
+              </div>
+            </button>
+            <div class="rdd-divider"></div>
             <button class="dd-item" on:click={() => { exportPNG(); showExportMenu = false }}>
               <span class="dd-icon">🖼</span>
               <div class="dd-info">
@@ -1236,11 +1271,19 @@
 
   /* ── EasyEDA CAD Header & Ribbon ── */
   .cad-header{ height:48px; background:#0f172a; border-bottom:1px solid #1e293b;
-    display:flex; align-items:center; padding:0 10px; gap:8px;
-    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:40; justify-content:space-between; }
+    display:flex; align-items:center; padding:0 12px; gap:8px;
+    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:40; justify-content:space-between;
+    overflow-x:auto; overflow-y:visible; }
+  .cad-header::-webkit-scrollbar { display:none; }
   .cad-ribbon-left{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
-  .cad-ribbon-center{ flex:1; display:flex; justify-content:center; min-width:0; }
+  .proj-name-wrap{ display:inline-flex; align-items:center; background:rgba(15,23,42,0.7);
+    border:1px solid #1e293b; border-radius:6px; padding:2px 8px; max-width:160px; min-width:80px; }
+  .proj-name{ font-size:12px; font-weight:600; color:#e2e8f0; outline:none; cursor:text;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .proj-name:hover{ color:#38bdf8; }
+  .proj-name:focus{ background:#1e293b; border-radius:4px; color:#ffffff; }
   .cad-ribbon-right{ display:flex; align-items:center; gap:6px; justify-content:flex-end; flex-shrink:0; }
+  .cad-ribbon-right .btn { padding:4px 9px; font-size:12px; }
 
   .cad-tag{ background:#0284c7; color:#fff; font-size:9px; font-weight:800; padding:2px 6px;
     border-radius:3px; font-family:monospace; letter-spacing:0.5px; }
@@ -1340,9 +1383,9 @@
   .logo{ display:flex; align-items:center; gap:7px; font-weight:800; font-size:15px; color:#38bdf8; }
   .logo-text{ letter-spacing:-0.3px; }
 
-  .proj-name{ font-size:14px; font-weight:600; color:#f8fafc; outline:none;
-    padding:4px 10px; border-radius:6px; border:1px solid transparent;
-    max-width:280px; text-align:center; transition:all .15s;
+  .proj-name{ font-size:12px; font-weight:600; color:#f8fafc; outline:none;
+    padding:2px 4px; border-radius:4px; border:1px solid transparent;
+    max-width:160px; min-width:60px; text-align:left; transition:all .15s;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .proj-name:hover{ background:#1e293b; border-color:#334155; }
   .proj-name:focus{ border-color:#38bdf8; background:#1e293b; box-shadow:0 0 0 2px rgba(56,189,248,0.2); }
@@ -1589,9 +1632,15 @@
     @keyframes slide-left { from{transform:translateX(100%)} to{transform:translateX(0)} }
   }
 
+  @media (max-width: 1280px) {
+    .btn-text { display: none; }
+    .shortcut-tag { display: none; }
+    .proj-name-wrap { max-width: 110px; }
+  }
+
   @media (max-width: 768px) {
     .cad-header { padding: 0 8px; gap: 6px; }
-    .proj-name { max-width: 140px; font-size: 13px; }
+    .proj-name { max-width: 100px; font-size: 12px; }
     .nav-toggle-lbl, .btn-text { display: none; }
     .ribbon-menus { display: none; }
     .tbtn-txt, .col-lbl-name { display: none; }
