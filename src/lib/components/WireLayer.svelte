@@ -18,7 +18,9 @@
     removeWire,
     updateWire,
     routingMode,
-    showPowerFlow
+    showPowerFlow,
+    activeHighlightedNet,
+    getDiscoveredNets
   } from '$lib/store/diagram.js'
 
   export let components = null
@@ -89,6 +91,10 @@
   function handleClick(w, e) {
     if ($activeTool === 'delete') { removeWire(w.id); return }
     selection.set({ id: w.id, type: 'wire' })
+    const discNets = getDiscoveredNets()
+    const found = discNets.find(n => n.wires.some(wire => wire.id === w.id))
+    if (found) activeHighlightedNet.set(found.name)
+    else if (w.label) activeHighlightedNet.set(w.label)
     e.stopPropagation()
   }
 

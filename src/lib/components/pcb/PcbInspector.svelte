@@ -8,6 +8,8 @@
   export let showCopperPour = false
   export let selectedComp = null
   export let selectedTraceId = null
+  export let activeHighlightedNet = null
+  export let enableTeardrops = true
   export let copperTracesCount = 0
   export let viasCount = 0
   export let drcResults = { errors: [], warnings: [], ok: true, clean: true }
@@ -75,6 +77,13 @@
           ⚡ Ground Plane (Poligon Tembaga)
         </span>
       </label>
+
+      <label class="pcb-toggle-row" style="margin-top: 6px;" title="Tambahkan fillet transisi teardrop pada persambungan trace ke pad dan via (standar IPC-7351)">
+        <input type="checkbox" bind:checked={enableTeardrops} on:change={() => dispatch('toggle-teardrops', enableTeardrops)} class="pcb-chk" />
+        <span class="pcb-toggle-lbl" style="font-size: 11px; font-weight: 600; color: #4ade80;">
+          💧 Teardrop Fillets (Penguat Pad & Via)
+        </span>
+      </label>
     </div>
 
     <!-- Section 2: Selected Component -->
@@ -108,6 +117,15 @@
         <span>Total Through-hole Via:</span>
         <span class="pcb-stat-val">{viasCount} via</span>
       </div>
+      {#if activeHighlightedNet}
+        <div class="pcb-highlight-box">
+          <div class="pcb-hl-title">⚡ Net Terpilih: <strong>{activeHighlightedNet}</strong></div>
+          <button on:click={() => dispatch('rip-up-net', activeHighlightedNet)} class="pcb-btn pcb-btn-danger pcb-btn-full" style="margin-top: 4px; margin-bottom: 8px;">
+            <span>⚡</span>
+            <span>Hapus Net Ini (Rip-Up Net)</span>
+          </button>
+        </div>
+      {/if}
       {#if selectedTraceId}
         <button on:click={() => dispatch('delete-selected-trace')} class="pcb-btn pcb-btn-danger pcb-btn-full" style="margin-bottom: 8px;">
           <span>🗑</span>
@@ -345,6 +363,19 @@
     font-weight: 700;
     color: #f8fafc;
   }
+  .pcb-highlight-box {
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin: 6px 0;
+  }
+  .pcb-hl-title {
+    font-size: 11px;
+    color: #38bdf8;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
 
   .pcb-btn {
     display: inline-flex;
@@ -431,3 +462,4 @@
   }
   .font-mono { font-family: monospace; }
 </style>
+

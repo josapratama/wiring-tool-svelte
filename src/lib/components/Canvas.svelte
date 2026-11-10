@@ -17,7 +17,7 @@
     addComponent, addWire, addLabel, removeLabel, removeWire, removeComponent,
     updateLabel, updateComponent, updateWire, duplicateComponent, pushHistory,
     rotateComponent, rotateComponents, flipComponents,
-    edaGridType, showDrawingSheet, highlightedWireIds as highlightedWireIdsStore,
+    edaGridType, showDrawingSheet, showPowerFlow, activeHighlightedNet, getDiscoveredNets, highlightedWireIds as highlightedWireIdsStore,
     sheetConfig, updateSheetConfig,
     getConnectedWireIds, getUsedPins
   } from '$lib/store/diagram.js'
@@ -187,6 +187,8 @@
     h: Math.abs(selBox.ey - selBox.sy),
   } : null
 
+  let probeHover = null
+
   function finishRubberBand() {
     if (!selBox || !selBox.active) { selBox = null; return }
     const r = selRect
@@ -195,8 +197,28 @@
         c.x < r.x + r.w && c.x + c.width  > r.x &&
         c.y < r.y + r.h && c.y + c.height > r.y
       )
-      multiSelection.set(hit.map(c => ({ id: c.instanceId, type:'component' })))
-      if (hit.length === 1) selection.set({ id:hit[0].instanceId, type:'component' })
+      const hitList = hit.map(c => ({ id: c.instanceId, type: 'component' }))
+
+      // Also select wires fully or centrally covered by marquee
+      const compMap = Object.fromEntries($components.map(c => [c.instanceId, c]))
+      $wires.forEach(w => {
+        const c1 = compMap[w.fromComp]
+        const c2 = compMap[w.toComp]
+        if (c1 && c2) {
+          const p1 = pinPos(c1)(w.fromPin)
+          const p2 = pinPos(c2)(w.toPin)
+          if (p1 && p2) {
+            const mx = (p1.x + p2.x) / 2
+            const my = (p1.y + p2.y) / 2
+            if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+              hitList.push({ id: w.id, type: 'wire' })
+            }
+          }
+        }
+      })
+
+      multiSelection.set(hitList)
+      if (hitList.length === 1) selection.set(hitList[0])
     }
     selBox = null
   }
@@ -224,6 +246,60 @@
       snapTarget = near ?? null
     } else {
       snapTarget = null
+    }
+
+    // Multimeter / Voltage Probe Tooltip Calculation
+    if ($showPowerFlow) {
+      const near = nearestPin($components, w.x, w.y, 22)
+      if (near && near.pin) {
+        const pinType = near.pin.type || 'digital'
+        const pinLabel = near.pin.label || near.pinId
+        let vText = '3.30 V'
+        let sType = 'Digital GPIO Bus'
+        let sState = 'HIGH (Logic 1)'
+        if (pinType === 'gnd' || pinLabel.toUpperCase() === 'GND') {
+          vText = '0.00 V'
+          sType = 'Ground Reference Rail'
+          sState = 'LOW (0V GND)'
+        } else if (pinLabel.includes('5V') || near.comp?.id === 'vcc-flag') {
+          vText = '+5.00 V'
+          sType = 'VCC Power Rail'
+          sState = 'ACTIVE (+5V)'
+        } else if (pinLabel.includes('3V3') || near.comp?.id === 'v33-flag') {
+          vText = '+3.30 V'
+          sType = 'Core VDD Power Rail'
+          sState = 'ACTIVE (+3.3V)'
+        } else if (near.comp?.id === 'v12-flag') {
+          vText = '+12.00 V'
+          sType = 'Main VMAIN Power Rail'
+          sState = 'ACTIVE (+12V)'
+        } else if (pinType === 'analog') {
+          vText = '1.65 V'
+          sType = 'ADC Analog Channel'
+          sState = 'DYNAMIC SIGNAL'
+        } else if (pinType === 'i2c') {
+          vText = '3.30 V'
+          sType = 'I2C Open-Drain Bus (SDA / SCL)'
+          sState = 'PULLED HIGH'
+        } else if (pinType === 'spi') {
+          vText = '3.30 V'
+          sType = 'SPI High-Speed Clock / Data'
+          sState = 'IDLE HIGH'
+        }
+
+        probeHover = {
+          screenX: e.clientX,
+          screenY: e.clientY,
+          title: `${near.comp.label || near.comp.name}: Pin ${pinLabel}`,
+          voltage: vText,
+          type: sType,
+          state: sState
+        }
+      } else {
+        probeHover = null
+      }
+    } else if (probeHover) {
+      probeHover = null
     }
   }
 
@@ -549,6 +625,14 @@
     const selWireId = $selection?.type === 'wire' ? $selection.id : null
     const selCompId = $selection?.type === 'component' ? $selection.id : null
 
+    if ($activeHighlightedNet) {
+      const discNets = getDiscoveredNets()
+      const match = discNets.find(n => n.name === $activeHighlightedNet)
+      if (match) {
+        match.wires.forEach(w => ids.add(w.id))
+      }
+    }
+
     if (selWireId) {
       ids.add(selWireId)
       const selWire = ws.find(w => w.id === selWireId)
@@ -640,6 +724,12 @@
   $: if (!inlineEditId) _prevInlineEditId = null
 
   function onNodeDblClick({ detail: { comp } }) {
+    if (comp.theme === 'switch' || comp.id?.includes('switch') || comp.id?.includes('button')) {
+      const nextState = comp.state === 'closed' ? 'open' : 'closed'
+      updateComponent(comp.instanceId, { state: nextState })
+      flashStatus(`⚡ Saklar ${comp.label || comp.name}: ${nextState === 'closed' ? 'ON (Sirkuit Tertutup)' : 'OFF (Terbuka)'}`)
+      return
+    }
     inlineLabel = comp.label
     inlineEditId = comp.instanceId
   }
@@ -1065,6 +1155,21 @@
   <!-- Zoom badge -->
   <div class="zoom-badge">{zoomPct}%</div>
 
+  <!-- Multimeter / Logic Voltage Probe Floating HUD -->
+  {#if $showPowerFlow && probeHover}
+    <div class="probe-hud" style="left: {probeHover.screenX + 18}px; top: {probeHover.screenY - 14}px;">
+      <div class="probe-hud-head">
+        <span class="probe-hud-dot"></span>
+        <span class="probe-hud-title">{probeHover.title}</span>
+      </div>
+      <div class="probe-hud-meter">
+        <span class="probe-voltage">{probeHover.voltage}</span>
+        <span class="probe-state">{probeHover.state}</span>
+      </div>
+      <div class="probe-hud-sub">{probeHover.type}</div>
+    </div>
+  {/if}
+
   <!-- Feature 7: Minimap -->
   {#if showMinimap}
     <Minimap {vx} {vy} {vscale} cw={canvasW} ch={canvasH} on:minipan={onMinipan}/>
@@ -1144,5 +1249,73 @@
     background:#1a1a40; border:2px solid #4f9cf9; border-radius:5px;
     color:#fff; font:700 13px -apple-system,sans-serif;
     padding:4px 8px; outline:none; text-align:center;
+  }
+
+  /* ── Interactive Oscilloscope / Multimeter Probe HUD ── */
+  .probe-hud {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: rgba(10, 15, 30, 0.95);
+    border: 1px solid #38bdf8;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(56, 189, 248, 0.35);
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 170px;
+    backdrop-filter: blur(6px);
+    animation: pop-probe 0.12s ease-out;
+  }
+  @keyframes pop-probe {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .probe-hud-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .probe-hud-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 6px #38bdf8;
+    animation: pulse-dot 1s infinite alternate;
+  }
+  @keyframes pulse-dot {
+    from { opacity: 0.5; }
+    to { opacity: 1; }
+  }
+  .probe-hud-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #f1f5f9;
+    white-space: nowrap;
+  }
+  .probe-hud-meter {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 2px;
+  }
+  .probe-voltage {
+    font-family: 'Consolas', monospace;
+    font-size: 18px;
+    font-weight: 800;
+    color: #4ade80;
+    text-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+  }
+  .probe-state {
+    font-size: 10px;
+    font-weight: 700;
+    color: #38bdf8;
+    text-transform: uppercase;
+  }
+  .probe-hud-sub {
+    font-size: 9.5px;
+    color: #94a3b8;
   }
 </style>

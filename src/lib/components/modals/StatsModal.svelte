@@ -108,3 +108,4 @@
   .theme-name { flex: 1; color: #94a3b8; text-transform: capitalize; }
   .theme-count { color: #38bdf8; font-weight: 700; }
 </style>
+

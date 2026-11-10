@@ -1296,3 +1296,100 @@ export function estimatePcbBOMCost(board, pcbComponents = []) {
     leadTimeDays: "2-3 Hari Kerja"
   };
 }
+
+/**
+ * Generates teardrop fillets for PCB trace-to-pad and trace-to-via junctions.
+ * Standard IPC-7351 practice to reinforce copper trace transitions and prevent drill breakout.
+ * @param {Array} traces - Array of { x1, y1, x2, y2, widthMm, layer, netId }
+ * @param {Array} pcbComponents - Array of placed PCB components with footprint pads
+ * @param {Array} vias - Array of placed through-hole vias { xMm, yMm, outerDiaMm }
+ * @returns {Array} Array of { id, layer, points, netId }
+ */
+export function generatePcbTeardrops(traces = [], pcbComponents = [], vias = []) {
+  if (!traces || !traces.length) return [];
+
+  const targets = [];
+
+  // 1. Through-hole vias
+  for (const v of vias) {
+    targets.push({
+      x: v.xMm,
+      y: v.yMm,
+      radius: (v.outerDiaMm || 1.0) / 2,
+      layer: 'both',
+      netId: v.netId
+    });
+  }
+
+  // 2. Component footprint pads
+  for (const c of pcbComponents) {
+    const fp = c.footprint;
+    if (!fp || !fp.pads) continue;
+    const rad = ((c.rotation || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    for (const p of fp.pads) {
+      const rx = p.xMm * cos - p.yMm * sin;
+      const ry = p.xMm * sin + p.yMm * cos;
+      const padRadius = Math.max(p.wMm || 1.6, p.hMm || 1.6) / 2;
+      targets.push({
+        x: c.xMm + rx,
+        y: c.yMm + ry,
+        radius: padRadius,
+        layer: p.layer || 'both',
+        netId: p.netId
+      });
+    }
+  }
+
+  const teardrops = [];
+  let dropId = 1;
+
+  for (const t of traces) {
+    const p1 = { x: t.x1, y: t.y1 };
+    const p2 = { x: t.x2, y: t.y2 };
+    const traceW = t.widthMm || 0.4;
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (len < 0.6) continue;
+
+    const checkEndpoint = (origin, other) => {
+      for (const tgt of targets) {
+        if (tgt.layer !== 'both' && tgt.layer !== t.layer) continue;
+        const d = Math.hypot(origin.x - tgt.x, origin.y - tgt.y);
+        if (d <= tgt.radius + 0.35) {
+          const dx = other.x - origin.x;
+          const dy = other.y - origin.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 0.4) continue;
+
+          const ux = dx / dist;
+          const uy = dy / dist;
+          const teardropLen = Math.min(dist * 0.45, tgt.radius * 0.9 + traceW * 1.3);
+
+          const apexX = origin.x + ux * teardropLen;
+          const apexY = origin.y + uy * teardropLen;
+
+          const angle = Math.atan2(uy, ux);
+          const spread = 0.785; // 45 deg
+          const ptAx = tgt.x + tgt.radius * Math.cos(angle + spread);
+          const ptAy = tgt.y + tgt.radius * Math.sin(angle + spread);
+          const ptBx = tgt.x + tgt.radius * Math.cos(angle - spread);
+          const ptBy = tgt.y + tgt.radius * Math.sin(angle - spread);
+
+          teardrops.push({
+            id: `td-${dropId++}`,
+            layer: t.layer,
+            netId: t.netId,
+            points: `${ptAx.toFixed(2)},${ptAy.toFixed(2)} ${apexX.toFixed(2)},${apexY.toFixed(2)} ${ptBx.toFixed(2)},${ptBy.toFixed(2)} ${origin.x.toFixed(2)},${origin.y.toFixed(2)}`
+          });
+        }
+      }
+    };
+
+    checkEndpoint(p1, p2);
+    checkEndpoint(p2, p1);
+  }
+
+  return teardrops;
+}

@@ -31,6 +31,9 @@
     addCopperTrace,
     removeCopperTrace,
     clearCopperTraces,
+    ripUpNetTraces,
+    activeHighlightedNet,
+    getDiscoveredNets,
     addPcbVia,
     removePcbVia,
     clearPcbVias,
@@ -41,7 +44,8 @@
     mm2px, px2mm, snapToPcbGrid, snapTo45Degrees,
     getFootprintForComponent, generateRatsnestLines, runPcbDrcCheck,
     generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg,
-    autoRoutePcbNets, generateCopperPourSvgPath, estimatePcbBOMCost
+    autoRoutePcbNets, generateCopperPourSvgPath, estimatePcbBOMCost,
+    generatePcbTeardrops
   } from '$lib/engine/pcb-engine.js'
 
   import PcbRibbon from './pcb/PcbRibbon.svelte'
@@ -85,6 +89,16 @@
   let selectedCompId = null
   let selectedTraceId = null
   $: selectedCompObj = pcbComponents.find(c => c.instanceId === selectedCompId) || null
+
+  let enableTeardrops = true
+  $: teardrops = enableTeardrops ? generatePcbTeardrops(copperTraces, pcbComponents, vias) : []
+
+  function handleRipUpNet(netId) {
+    if (!netId) return
+    ripUpNetTraces(netId)
+    autoRouteFeedback = `⚡ Jalur Net "${netId}" berhasil dihapus (rip-up).`
+    setTimeout(() => { if (autoRouteFeedback.includes(netId)) autoRouteFeedback = '' }, 3000)
+  }
 
   function handleExportModalAction(e) {
     const type = e.detail
@@ -330,6 +344,17 @@
     } else if (activeTool === 'select') {
       selectedCompId = comp.instanceId
       selectedTraceId = null
+      const pinId = String(pad.num || pad.name || '')
+      const connWire = $wiresStore.find(w =>
+        (w.fromComp === comp.instanceId && (w.fromPin === pinId || String(w.fromPin).toLowerCase() === pinId.toLowerCase())) ||
+        (w.toComp === comp.instanceId && (w.toPin === pinId || String(w.toPin).toLowerCase() === pinId.toLowerCase()))
+      )
+      if (connWire) {
+        const discNets = getDiscoveredNets()
+        const found = discNets.find(n => n.wires.some(w => w.id === connWire.id))
+        if (found) activeHighlightedNet.set(found.name)
+        else if (connWire.label) activeHighlightedNet.set(connWire.label)
+      }
     }
   }
 
@@ -380,6 +405,7 @@
     } else {
       selectedCompId = null
       selectedTraceId = null
+      activeHighlightedNet.set(null)
       routingStart = null
       routingCurrent = null
     }
@@ -630,16 +656,32 @@
           <!-- C. Copper Traces (Bottom Layer B.Cu - Blue) -->
           {#if showBottomCopper}
             <g id="bottom-copper-layer">
+              <!-- Teardrops Fillets on Bottom Layer -->
+              {#each teardrops.filter(td => td.layer === 'bottom') as td (td.id)}
+                <polygon
+                  points={td.points}
+                  fill={$activeHighlightedNet && td.netId === $activeHighlightedNet ? '#38bdf8' : '#2563eb'}
+                  opacity="0.95"
+                  pointer-events="none"
+                />
+              {/each}
+
               {#each copperTraces.filter(t => t.layer === 'bottom') as trace}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <line
                   x1={trace.x1} y1={trace.y1} x2={trace.x2} y2={trace.y2}
-                  stroke={selectedTraceId === trace.id ? '#60a5fa' : '#2563eb'}
+                  stroke={selectedTraceId === trace.id ? '#60a5fa' : ($activeHighlightedNet && trace.netId === $activeHighlightedNet) ? '#38bdf8' : '#2563eb'}
                   stroke-width={trace.widthMm}
                   stroke-linecap="round"
-                  on:click={(e) => { e.stopPropagation(); selectedTraceId = trace.id; selectedCompId = null }}
+                  on:click={(e) => {
+                    e.stopPropagation()
+                    selectedTraceId = trace.id
+                    selectedCompId = null
+                    if (trace.netId) activeHighlightedNet.set(trace.netId)
+                  }}
                   class="pcb-trace"
+                  class:pcb-trace-highlight={$activeHighlightedNet && trace.netId === $activeHighlightedNet}
                 />
               {/each}
             </g>
@@ -648,16 +690,32 @@
           <!-- D. Copper Traces (Top Layer F.Cu - Red) -->
           {#if showTopCopper}
             <g id="top-copper-layer">
+              <!-- Teardrops Fillets on Top Layer -->
+              {#each teardrops.filter(td => td.layer === 'top') as td (td.id)}
+                <polygon
+                  points={td.points}
+                  fill={$activeHighlightedNet && td.netId === $activeHighlightedNet ? '#38bdf8' : '#dc2626'}
+                  opacity="0.95"
+                  pointer-events="none"
+                />
+              {/each}
+
               {#each copperTraces.filter(t => t.layer === 'top') as trace}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <line
                   x1={trace.x1} y1={trace.y1} x2={trace.x2} y2={trace.y2}
-                  stroke={selectedTraceId === trace.id ? '#f87171' : '#dc2626'}
+                  stroke={selectedTraceId === trace.id ? '#f87171' : ($activeHighlightedNet && trace.netId === $activeHighlightedNet) ? '#38bdf8' : '#dc2626'}
                   stroke-width={trace.widthMm}
                   stroke-linecap="round"
-                  on:click={(e) => { e.stopPropagation(); selectedTraceId = trace.id; selectedCompId = null }}
+                  on:click={(e) => {
+                    e.stopPropagation()
+                    selectedTraceId = trace.id
+                    selectedCompId = null
+                    if (trace.netId) activeHighlightedNet.set(trace.netId)
+                  }}
                   class="pcb-trace"
+                  class:pcb-trace-highlight={$activeHighlightedNet && trace.netId === $activeHighlightedNet}
                 />
               {/each}
             </g>
@@ -882,6 +940,8 @@
         bind:cornerRadiusMm
         bind:includeMountHoles={mountingHoles}
         bind:showCopperPour
+        bind:enableTeardrops
+        activeHighlightedNet={$activeHighlightedNet}
         selectedComp={selectedCompObj}
         {selectedTraceId}
         copperTracesCount={copperTraces.length}
@@ -892,6 +952,8 @@
         on:rotate-component={() => rotateSelectedComponent(90)}
         on:delete-selected-trace={deleteSelectedTrace}
         on:clear-all-traces={clearAllTraces}
+        on:rip-up-net={e => handleRipUpNet(e.detail)}
+        on:toggle-teardrops={e => enableTeardrops = e.detail}
         on:highlight-drc={e => highlightDrcIssue(e.detail)}
         on:open-export={() => showExportModal = true}
       />
@@ -1002,6 +1064,11 @@
     align-items: flex-start;
     gap: 6px;
     padding: 8px 12px;
+  }
+
+  :global(.pcb-trace-highlight) {
+    stroke: #38bdf8 !important;
+    filter: drop-shadow(0 0 5px #38bdf8);
   }
 
   .pcb-hud-sep {

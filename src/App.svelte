@@ -17,12 +17,15 @@
   import SchematicToolbar from '$lib/components/toolbar/SchematicToolbar.svelte'
   import StatsModal from '$lib/components/modals/StatsModal.svelte'
   import HelpModal from '$lib/components/modals/HelpModal.svelte'
+  import VersionHistoryModal from '$lib/components/modals/VersionHistoryModal.svelte'
+  import CustomComponentModal from '$lib/components/CustomComponentModal.svelte'
   import {
     exportDiagramSvg,
     exportDiagramPng,
     exportNetlistCsv,
     generateShareLink,
-    downloadFile
+    downloadFile,
+    exportFabricationDocPack
   } from '$lib/services/export-service.js'
 
   import { showAlert, showConfirm } from '$lib/store/dialog.js'
@@ -32,6 +35,7 @@
     activeTool, undo, redo, pushHistory,
     selection, multiSelection, routingMode,
     components as compsStore, wires as wiresStore,
+    copperTraces as tracesStore, pcbVias as viasStore, pcbBoardConfig as boardConfigStore,
     duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
     flipComponentX, flipComponentY, flipComponents,
     edaGridType, showDrawingSheet, showPowerFlow, sheetConfig, updateSheetConfig,
@@ -60,6 +64,8 @@
   let showBomModal = false
   let showStats = false
   let showShortcuts = false
+  let showSnapshotModal = false
+  let showCustomCompModal = false
 
   // Layout sidebars & status flash
   let showLeftSidebar = true
@@ -267,17 +273,40 @@
     flash('⚡ Membuka Virtual MCU Simulator Lab...')
   }
 
+  function handleExportDocPack() {
+    exportFabricationDocPack({
+      projectName,
+      components: $compsStore,
+      wires: $wiresStore,
+      sheetConfig: $sheetConfig,
+      pcbBoardConfig: $boardConfigStore,
+      copperTraces: $tracesStore,
+      vias: $viasStore
+    })
+    flash('📑 Membuka Dokumen Fabrikasi Lengkap (PDF Pack)...')
+  }
+
   // ── Ribbon Menus & Export Handlers ─────────────────────────────────────────
   function handleMenuAction(action) {
     switch (action) {
-      case 'new': handleClearDiagram(); break
-      case 'open': importJSON(); break
-      case 'save': exportJSON(); break
+      case 'new':
+      case 'new-diagram': handleClearDiagram(); break
+      case 'open':
+      case 'open-json': importJSON(); break
+      case 'save':
+      case 'save-json': exportJSON(); break
+      case 'open-snapshots': showSnapshotModal = true; break
+      case 'export-doc-pack': handleExportDocPack(); break
+      case 'open-custom-comp': showCustomCompModal = true; break
+      case 'open-bom': exportBOM(); break
+      case 'open-wokwi-modal': showWokwiModal = true; break
       case 'export-json': exportJSON(); break
       case 'export-svg': exportSVG(); break
       case 'export-png': exportPNG(); break
-      case 'export-csv': exportNetlist(); break
+      case 'export-csv':
+      case 'export-netlist': exportNetlist(); break
       case 'export-bom': exportBOM(); break
+      case 'clear-diagram': handleClearDiagram(); break
       case 'wokwi': showWokwiModal = true; break
       case 'print': printDiagram(); break
       case 'share-link': shareDiagramLink(); break
@@ -289,10 +318,12 @@
       case 'flip-x': doFlipX(); break
       case 'flip-y': doFlipY(); break
       case 'place-wire': setTool('wire'); break
-      case 'place-label': setTool('label'); break
+      case 'place-label':
+      case 'tool-label': setTool('label'); break
       case 'place-gnd': placeGND(); break
       case 'place-vcc': placeVCC('vcc-flag'); break
-      case 'place-quick': showQuickPalette = true; break
+      case 'place-quick':
+      case 'open-quick-palette': showQuickPalette = true; break
       case 'fit-view': canvasRef.fitView?.(); break
       case 'zoom-in': canvasRef.zoomIn?.(); break
       case 'zoom-out': canvasRef.zoomOut?.(); break
@@ -300,6 +331,9 @@
       case 'toggle-sheet': canvasRef.toggleSheet?.(); break
       case 'toggle-theme': toggleTheme(); break
       case 'toggle-minimap': canvasRef.toggleMinimap?.(); break
+      case 'toggle-left-sidebar': toggleLeftSidebar(); break
+      case 'toggle-right-sidebar': toggleRightSidebar(); break
+      case 'open-erc':
       case 'run-erc': showERCModal = true; break
       case 'run-codegen': showCodeGenModal = true; break
       case 'run-simulator': openSimulatorLab(); break
@@ -326,7 +360,9 @@
       case 'png': exportPNG(); break
       case 'csv': exportNetlist(); break
       case 'bom': exportBOM(); break
+      case 'doc-pack': handleExportDocPack(); break
       case 'wokwi': showWokwiModal = true; break
+      case 'share':
       case 'share-link': shareDiagramLink(); break
       case 'print': printDiagram(); break
     }
@@ -691,6 +727,19 @@
   {/if}
 
   <BomCostEstimatorModal bind:show={showBomModal} {projectName} />
+
+  <!-- 📜 Project Version History & Snapshots Modal -->
+  <VersionHistoryModal
+    bind:show={showSnapshotModal}
+    {projectName}
+    on:restored={e => flash(`Proyek berhasil dipulihkan ke: ${e.detail} ✓`)}
+  />
+
+  <!-- 🛠️ Custom Component Builder (EELib Studio) Modal -->
+  <CustomComponentModal
+    bind:show={showCustomCompModal}
+    on:created={() => flash('Komponen kustom baru berhasil disimpan ke EELib ✓')}
+  />
 </div>
 
 <style>

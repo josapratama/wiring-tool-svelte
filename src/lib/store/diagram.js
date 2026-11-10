@@ -45,7 +45,8 @@ export const pcbBoardConfig = writable({
   mountingHoleDiaMm: 3.2,
   copperPourGnd: false,
   copperPourLayer: "bottom", // 'bottom' | 'top' | 'both'
-  soldermaskColor: "green" // 'green' | 'black' | 'blue' | 'red' | 'white'
+  soldermaskColor: "green", // 'green' | 'black' | 'blue' | 'red' | 'white'
+  enableTeardrops: true
 });
 export const copperTraces = writable([]);
 export const pcbVias = writable([]);
@@ -89,6 +90,12 @@ export function removeCopperTrace(traceId) {
 export function clearCopperTraces() {
   pushHistory();
   copperTraces.set([]);
+}
+
+export function ripUpNetTraces(netId) {
+  if (!netId) return;
+  pushHistory();
+  copperTraces.update(traces => traces.filter(t => t.netId !== netId));
 }
 
 export function addPcbVia(via) {

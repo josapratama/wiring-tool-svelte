@@ -23,6 +23,12 @@
       <button class="rdd-item" on:click={() => triggerAction('save-json')}>
         <span class="rdd-icon">💾</span> Simpan File JSON <span class="rdd-key">Ctrl+S</span>
       </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-snapshots')}>
+        <span class="rdd-icon">📜</span> Riwayat Versi & Snapshot
+      </button>
+      <button class="rdd-item" on:click={() => triggerAction('export-doc-pack')}>
+        <span class="rdd-icon">📑</span> Dokumen Fabrikasi Lengkap (PDF)
+      </button>
       <div class="rdd-divider"></div>
       <button class="rdd-item" on:click={() => triggerAction('export-png')}>
         <span class="rdd-icon">🖼</span> Ekspor Gambar (PNG)
@@ -91,6 +97,9 @@
       </button>
       <button class="rdd-item" on:click={() => triggerAction('open-quick-palette')}>
         <span class="rdd-icon">🔍</span> Cari & Tambah Komponen <span class="rdd-key">Ctrl+K</span>
+      </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-custom-comp')}>
+        <span class="rdd-icon">🛠️</span> Buat Komponen Kustom (EELib)
       </button>
 
     {:else if activeMenu === 'view'}
@@ -204,3 +213,4 @@
     color: #f87171;
   }
 </style>
+

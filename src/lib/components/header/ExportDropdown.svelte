@@ -49,11 +49,19 @@
       </div>
     </button>
 
+    <button class="dd-item" on:click={() => selectAction('doc-pack')}>
+      <span class="dd-icon">📑</span>
+      <div class="dd-info">
+        <span class="dd-label">Dokumen Fabrikasi Lengkap (PDF Pack)</span>
+        <span class="dd-desc">Cover, Skematik, PCB Layout & Tabel BOM</span>
+      </div>
+    </button>
+
     <button class="dd-item" on:click={() => selectAction('print')}>
       <span class="dd-icon">🖨</span>
       <div class="dd-info">
-        <span class="dd-label">Cetak / Print to PDF</span>
-        <span class="dd-desc">Cetak layout skematik lanskap A4/A3</span>
+        <span class="dd-label">Cetak Skematik (Print PDF)</span>
+        <span class="dd-desc">Cetak lembar skematik lanskap A4/A3</span>
       </div>
     </button>
 
@@ -164,3 +172,4 @@
     margin: 4px 0;
   }
 </style>
+
