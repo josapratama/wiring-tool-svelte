@@ -612,20 +612,32 @@
       <span class="cad-tag">{$activeEditorView === 'pcb' ? 'PCB' : 'SCH'}</span>
 
       <!-- Mode Switcher: Schematic & Wiring vs PCB Layout -->
-      <div class="mode-switcher-wrap flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700 ml-2">
-        <button class="px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 {$activeEditorView === 'wiring' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
-          on:click={() => setActiveEditorView('wiring')}>
+      <div class="cad-mode-switcher">
+        <button
+          class="cad-mode-btn"
+          class:cad-mode-active={$activeEditorView === 'wiring'}
+          on:click={() => setActiveEditorView('wiring')}
+          title="Buka Kanvas Perancangan Skematik & Wiring"
+        >
           <span>🔌 Skematik</span>
         </button>
-        <button class="px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 {$activeEditorView === 'pcb' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
-          on:click={() => setActiveEditorView('pcb')}>
+        <button
+          class="cad-mode-btn cad-mode-pcb"
+          class:cad-mode-active={$activeEditorView === 'pcb'}
+          on:click={() => setActiveEditorView('pcb')}
+          title="Buka Studio Tata Letak Papan PCB & Jalur Tembaga"
+        >
           <span>🟩 PCB Layout</span>
         </button>
       </div>
 
       {#if $activeEditorView === 'wiring'}
-        <button class="px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition ml-1 {$renderMode === 'realistic' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800 text-slate-300 border-slate-700'}"
-          on:click={toggleRenderMode} title="Ubah tampilan komponen fisik realistis Wokwi atau simbol skematik">
+        <button
+          class="cad-render-btn"
+          class:cad-render-active={$renderMode === 'realistic'}
+          on:click={toggleRenderMode}
+          title="Ubah tampilan komponen fisik realistis Wokwi atau simbol skematik"
+        >
           <span>{$renderMode === 'realistic' ? '🎨 Wokwi Fisik' : '📐 Simbol'}</span>
         </button>
       {/if}
@@ -965,7 +977,7 @@
 
   <div class="body">
     <!-- LEFT SIDEBAR (EELib & DESIGN MANAGER) -->
-    {#if showLeftSidebar}
+    {#if showLeftSidebar && $activeEditorView === 'wiring'}
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <div class="drawer-backdrop left-bd" on:click={() => showLeftSidebar = false}></div>
       <div class="sidebar-wrapper left-wrap">
@@ -979,119 +991,121 @@
 
     <!-- CANVAS COLUMN ───────────────────────────────── -->
     <div class="canvas-col">
-      <!-- TIER 2: CAD ACTION TOOLSTRIP -->
-      <div class="toolbar cad-action-strip">
-        <!-- Tools & Net Ports Segment -->
-        <div class="tg tool-group">
-          {#each TOOLS as t}
-            <button class="tbtn" class:active={curTool===t.id}
-              title={t.title} on:click={() => setTool(t.id)}>
-              <span class="tbtn-icon">{t.icon}</span>
-              <span class="tbtn-txt">{t.label}</span>
+      <!-- TIER 2: CAD ACTION TOOLSTRIP (Hanya tampil di mode Skematik) -->
+      {#if $activeEditorView === 'wiring'}
+        <div class="toolbar cad-action-strip">
+          <!-- Tools & Net Ports Segment -->
+          <div class="tg tool-group">
+            {#each TOOLS as t}
+              <button class="tbtn" class:active={curTool===t.id}
+                title={t.title} on:click={() => setTool(t.id)}>
+                <span class="tbtn-icon">{t.icon}</span>
+                <span class="tbtn-txt">{t.label}</span>
+              </button>
+            {/each}
+            <div class="tg-sep"></div>
+            <!-- Quick Place Net Ports (Iconic EasyEDA features!) -->
+            <button class="tbtn flag-btn" on:click={placeGND} title="Pasang Ground Port (⏚ GND) [Shift+G]">
+              <span class="tbtn-icon">⏚</span>
+              <span class="tbtn-txt">GND</span>
             </button>
-          {/each}
-          <div class="tg-sep"></div>
-          <!-- Quick Place Net Ports (Iconic EasyEDA features!) -->
-          <button class="tbtn flag-btn" on:click={placeGND} title="Pasang Ground Port (⏚ GND) [Shift+G]">
-            <span class="tbtn-icon">⏚</span>
-            <span class="tbtn-txt">GND</span>
-          </button>
-          <button class="tbtn flag-btn" on:click={() => placeVCC('vcc-flag')} title="Pasang Power Port (▲ +5V) [P]">
-            <span class="tbtn-icon">▲</span>
-            <span class="tbtn-txt">VCC</span>
-          </button>
-        </div>
+            <button class="tbtn flag-btn" on:click={() => placeVCC('vcc-flag')} title="Pasang Power Port (▲ +5V) [P]">
+              <span class="tbtn-icon">▲</span>
+              <span class="tbtn-txt">VCC</span>
+            </button>
+          </div>
 
-        <!-- Routing Mode Toggle -->
-        <div class="tg routing-tg">
-          <button class="tbtn mode-btn" class:active={$routingMode === 'orthogonal'} on:click={() => routingMode.set('orthogonal')} title="Siku 90° (Orthogonal)">
-            <span>⎶</span> <span class="tbtn-txt">Siku</span>
-          </button>
-          <button class="tbtn mode-btn" class:active={$routingMode === 'curved'} on:click={() => routingMode.set('curved')} title="Lengkung (Smooth Bezier)">
-            <span>〰</span> <span class="tbtn-txt">Lengkung</span>
-          </button>
-          <button class="tbtn mode-btn" class:active={$routingMode === 'direct'} on:click={() => routingMode.set('direct')} title="Lurus (Direct)">
-            <span>╱</span> <span class="tbtn-txt">Lurus</span>
-          </button>
-        </div>
+          <!-- Routing Mode Toggle -->
+          <div class="tg routing-tg">
+            <button class="tbtn mode-btn" class:active={$routingMode === 'orthogonal'} on:click={() => routingMode.set('orthogonal')} title="Siku 90° (Orthogonal)">
+              <span>⎶</span> <span class="tbtn-txt">Siku</span>
+            </button>
+            <button class="tbtn mode-btn" class:active={$routingMode === 'curved'} on:click={() => routingMode.set('curved')} title="Lengkung (Smooth Bezier)">
+              <span>〰</span> <span class="tbtn-txt">Lengkung</span>
+            </button>
+            <button class="tbtn mode-btn" class:active={$routingMode === 'direct'} on:click={() => routingMode.set('direct')} title="Lurus (Direct)">
+              <span>╱</span> <span class="tbtn-txt">Lurus</span>
+            </button>
+          </div>
 
-        <!-- Wire Color Popover -->
-        <div class="tg wire-color-tg dropdown-wrap">
-          <button class="tbtn color-popover-btn" on:click|stopPropagation={() => showColorPicker = !showColorPicker} title="Pilih Warna Kabel">
-            <span class="cdot-active-preview" style="background:{activeColor}"></span>
-            <span class="col-lbl-name">{activeColorObj ? activeColorObj.t : 'Wire'}</span>
-            <span class="arrow-down-sm">▾</span>
-          </button>
+          <!-- Wire Color Popover -->
+          <div class="tg wire-color-tg dropdown-wrap">
+            <button class="tbtn color-popover-btn" on:click|stopPropagation={() => showColorPicker = !showColorPicker} title="Pilih Warna Kabel">
+              <span class="cdot-active-preview" style="background:{activeColor}"></span>
+              <span class="col-lbl-name">{activeColorObj ? activeColorObj.t : 'Wire'}</span>
+              <span class="arrow-down-sm">▾</span>
+            </button>
 
-          {#if showColorPicker}
-            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-            <div class="color-popover" on:click|stopPropagation>
-              <div class="color-popover-title">Preset Warna Jalur & Kabel</div>
-              <div class="color-grid">
-                {#each WIRE_COLORS as wc}
-                  <button
-                    class="color-chip"
-                    class:chip-selected={activeColor === wc.c}
-                    on:click={() => { pickColor(wc.c); showColorPicker = false }}
-                    title="{wc.t} ({wc.c})"
-                  >
-                    <span class="chip-dot" style="background:{wc.c}"></span>
-                    <span class="chip-label">{wc.t}</span>
-                  </button>
-                {/each}
+            {#if showColorPicker}
+              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+              <div class="color-popover" on:click|stopPropagation>
+                <div class="color-popover-title">Preset Warna Jalur & Kabel</div>
+                <div class="color-grid">
+                  {#each WIRE_COLORS as wc}
+                    <button
+                      class="color-chip"
+                      class:chip-selected={activeColor === wc.c}
+                      on:click={() => { pickColor(wc.c); showColorPicker = false }}
+                      title="{wc.t} ({wc.c})"
+                    >
+                      <span class="chip-dot" style="background:{wc.c}"></span>
+                      <span class="chip-label">{wc.t}</span>
+                    </button>
+                  {/each}
+                </div>
+                <div class="color-custom-row">
+                  <span class="color-custom-lbl">Warna Bebas:</span>
+                  <input type="color" value={activeColor} on:input={e => pickColor(e.target.value)} class="col-custom-inp" title="Custom color picker" />
+                </div>
               </div>
-              <div class="color-custom-row">
-                <span class="color-custom-lbl">Warna Bebas:</span>
-                <input type="color" value={activeColor} on:input={e => pickColor(e.target.value)} class="col-custom-inp" title="Custom color picker" />
-              </div>
-            </div>
-          {/if}
-        </div>
+            {/if}
+          </div>
 
-        <!-- Orientation & Transforms Group (Rotate & Flip) -->
-        <div class="tg transform-tg">
-          <button class="tbtn" on:click={() => doRotate(90)} title="Putar Komponen 90° (R)">
-            <span>↻</span> <span class="tbtn-txt">Rotate</span>
-          </button>
-          <button class="tbtn" on:click={doFlipX} title="Flip Horizontal (Cermin Kiri-Kanan) [X]">
-            <span>⇆</span> <span class="tbtn-txt">Flip X</span>
-          </button>
-          <button class="tbtn" on:click={doFlipY} title="Flip Vertical (Cermin Atas-Bawah) [Y]">
-            <span>⇅</span> <span class="tbtn-txt">Flip Y</span>
-          </button>
-        </div>
+          <!-- Orientation & Transforms Group (Rotate & Flip) -->
+          <div class="tg transform-tg">
+            <button class="tbtn" on:click={() => doRotate(90)} title="Putar Komponen 90° (R)">
+              <span>↻</span> <span class="tbtn-txt">Rotate</span>
+            </button>
+            <button class="tbtn" on:click={doFlipX} title="Flip Horizontal (Cermin Kiri-Kanan) [X]">
+              <span>⇆</span> <span class="tbtn-txt">Flip X</span>
+            </button>
+            <button class="tbtn" on:click={doFlipY} title="Flip Vertical (Cermin Atas-Bawah) [Y]">
+              <span>⇅</span> <span class="tbtn-txt">Flip Y</span>
+            </button>
+          </div>
 
-        <!-- Canvas View Controls (Grid & Sheet) -->
-        <div class="tg toggles-group">
-          <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()} title="Ganti Mode Grid (Dots / Lines / Off) [G]">
-            <span>∷</span> <span class="tbtn-txt">{$edaGridType.toUpperCase()}</span>
-          </button>
-          <button class="tbtn" class:active={$showDrawingSheet} on:click={() => canvasRef.toggleSheet?.()} title="Tampilkan/Sembunyikan Bingkai Drawing Sheet CAD">
-            <span>📄</span> <span class="tbtn-txt">Sheet</span>
-          </button>
-          <button class="tbtn probe-btn" class:probe-active={$showPowerFlow} on:click={() => showPowerFlow.update(v => !v)} title="Simulasi Aliran Arus / Voltage Probe">
-            <span>⚡</span> <span class="tbtn-txt">Probe</span>
-          </button>
-          <button class="tbtn" on:click={shareDiagramLink} title="Salin Tautan Proyek (Share Link) 🔗">
-            <span>🔗</span> <span class="tbtn-txt">Share</span>
-          </button>
-          <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Tampilkan/Sembunyikan Minimap (M)">🗺</button>
-          <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema (Light / Dark)">
-            <span>{isLightMode ? '☀️' : '🌙'}</span>
-            <span class="tbtn-txt">{isLightMode ? 'Light' : 'Dark'}</span>
-          </button>
-        </div>
+          <!-- Canvas View Controls (Grid & Sheet) -->
+          <div class="tg toggles-group">
+            <button class="tbtn" on:click={() => canvasRef.toggleGrid?.()} title="Ganti Mode Grid (Dots / Lines / Off) [G]">
+              <span>∷</span> <span class="tbtn-txt">{$edaGridType.toUpperCase()}</span>
+            </button>
+            <button class="tbtn" class:active={$showDrawingSheet} on:click={() => canvasRef.toggleSheet?.()} title="Tampilkan/Sembunyikan Bingkai Drawing Sheet CAD">
+              <span>📄</span> <span class="tbtn-txt">Sheet</span>
+            </button>
+            <button class="tbtn probe-btn" class:probe-active={$showPowerFlow} on:click={() => showPowerFlow.update(v => !v)} title="Simulasi Aliran Arus / Voltage Probe">
+              <span>⚡</span> <span class="tbtn-txt">Probe</span>
+            </button>
+            <button class="tbtn" on:click={shareDiagramLink} title="Salin Tautan Proyek (Share Link) 🔗">
+              <span>🔗</span> <span class="tbtn-txt">Share</span>
+            </button>
+            <button class="tbtn" on:click={() => canvasRef.toggleMinimap?.()} title="Tampilkan/Sembunyikan Minimap (M)">🗺</button>
+            <button class="tbtn theme-toggle-btn" on:click={toggleTheme} title="Ganti Tema (Light / Dark)">
+              <span>{isLightMode ? '☀️' : '🌙'}</span>
+              <span class="tbtn-txt">{isLightMode ? 'Light' : 'Dark'}</span>
+            </button>
+          </div>
 
-        <!-- History & Zoom Controls -->
-        <div class="tg zoom-group">
-          <button class="tbtn" on:click={undo} title="Undo (Ctrl+Z)">↩</button>
-          <button class="tbtn" on:click={redo} title="Redo (Ctrl+Y)">↪</button>
-          <div class="tg-sep"></div>
-          <button class="tbtn" on:click={() => canvasRef.fitView?.()} title="Fit View (F)">Fit</button>
-          <button class="tbtn" on:click={() => canvasRef.zoomIn?.()} title="Zoom In (+)">+</button>
-          <button class="tbtn" on:click={() => canvasRef.zoomOut?.()} title="Zoom Out (−)">−</button>
+          <!-- History & Zoom Controls -->
+          <div class="tg zoom-group">
+            <button class="tbtn" on:click={undo} title="Undo (Ctrl+Z)">↩</button>
+            <button class="tbtn" on:click={redo} title="Redo (Ctrl+Y)">↪</button>
+            <div class="tg-sep"></div>
+            <button class="tbtn" on:click={() => canvasRef.fitView?.()} title="Fit View (F)">Fit</button>
+            <button class="tbtn" on:click={() => canvasRef.zoomIn?.()} title="Zoom In (+)">+</button>
+            <button class="tbtn" on:click={() => canvasRef.zoomOut?.()} title="Zoom Out (−)">−</button>
+          </div>
         </div>
-      </div>
+      {/if}
 
       <!-- CANVAS OR PCB STUDIO -->
       {#if $activeEditorView === 'pcb'}
@@ -1102,7 +1116,7 @@
     </div>
 
     <!-- RIGHT SIDEBAR (PROPERTIES & TEMPLATES) ──────── -->
-    {#if showRightSidebar}
+    {#if showRightSidebar && $activeEditorView === 'wiring'}
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <div class="drawer-backdrop right-bd" on:click={() => showRightSidebar = false}></div>
       <aside class="rsb sidebar-wrapper right-wrap">
@@ -1230,6 +1244,74 @@
 
   .cad-tag{ background:#0284c7; color:#fff; font-size:9px; font-weight:800; padding:2px 6px;
     border-radius:3px; font-family:monospace; letter-spacing:0.5px; }
+
+  /* ── CAD Mode Switcher & Realistic Toggle ── */
+  .cad-mode-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 7px;
+    padding: 2px;
+    gap: 2px;
+    margin-left: 6px;
+  }
+  .cad-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .cad-mode-btn:hover {
+    background: #1e293b;
+    color: #ffffff;
+  }
+  .cad-mode-btn.cad-mode-active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+  }
+  .cad-mode-pcb.cad-mode-active {
+    background: #059669;
+    border-color: #10b981;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+  }
+  .cad-render-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #cbd5e1;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 4px;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .cad-render-btn:hover {
+    background: #334155;
+    color: #ffffff;
+  }
+  .cad-render-btn.cad-render-active {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.4);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
+  }
 
   .ribbon-menus{ display:flex; align-items:center; gap:2px; margin-left:6px; }
   .menu-item-wrap{ position:relative; }

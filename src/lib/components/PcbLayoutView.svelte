@@ -11,6 +11,7 @@
    * - Via placement connecting Top and Bottom copper layers
    * - Integrated Design Rule Check (DRC) and Unrouted Net Auditor
    * - Gerber RS-274X, Excellon Drill, EasyEDA JSON, and 1:1 DIY Etching Mask Exporters
+   * - Fully responsive UI with pure scoped CSS, collapsible inspector, and mobile HUD
    */
 
   import { onMount, createEventDispatcher } from 'svelte'
@@ -34,14 +35,14 @@
   let gridStepMm = 2.54 // standard 100 mil grid (switchable to 1.27mm / 0.5mm)
   
   let zoom = 2.5 // scale factor (screen px per mm)
-  let panX = 120
-  let panY = 80
+  let panX = 140
+  let panY = 70
   let isPanning = false
   let panStartX = 0
   let panStartY = 0
 
   // ── PCB Tools & Layers ──────────────────────────────────────────────────────
-  let activeTool = 'select' // 'select' | 'route' | 'via' | 'delete' | 'measure'
+  let activeTool = 'select' // 'select' | 'route' | 'via'
   let activeLayer = 'top' // 'top' (F.Cu - Red) | 'bottom' (B.Cu - Blue)
   let activeTraceWidth = 0.40 // mm (0.25, 0.40, 0.80, 1.20)
 
@@ -64,14 +65,14 @@
   let showTopCopper = true
   let showBottomCopper = true
 
-  // ── Modals State ────────────────────────────────────────────────────────────
+  // ── Inspector & Modal State ─────────────────────────────────────────────────
+  let showInspector = true
   let showExportModal = false
   let exportSuccessMsg = ''
 
   // ── Synchronize Components from Schematic ───────────────────────────────────
   $: {
     const rawComps = $compsStore
-    // Map or update existing PCB components preserving custom placed positions
     const existingMap = new Map(pcbComponents.map(c => [c.instanceId, c]))
     
     let defaultCol = 15
@@ -100,10 +101,10 @@
         footprint: fp
       }
 
-      defaultCol += (fp.widthMm || 20) + 10
+      defaultCol += (fp.widthMm || 20) + 12
       if (defaultCol > boardWidthMm - 20) {
         defaultCol = 15
-        defaultRow += 30
+        defaultRow += 28
       }
 
       return compObj
@@ -127,9 +128,8 @@
   function handleWheel(e) {
     e.preventDefault()
     const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87
-    const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.8), 8.0)
+    const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.6), 9.0)
     
-    // Zoom toward mouse pointer
     const rect = e.currentTarget.getBoundingClientRect()
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
@@ -140,7 +140,7 @@
   }
 
   function startPan(e) {
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    if (e.button === 1 || (e.button === 0 && e.altKey) || (e.button === 0 && e.shiftKey)) {
       isPanning = true
       panStartX = e.clientX - panX
       panStartY = e.clientY - panY
@@ -160,7 +160,12 @@
       const rawX = (e.clientX - rect.left - panX) / zoom
       const rawY = (e.clientY - rect.top - panY) / zoom
       
-      const snapped = snapTo45Degrees(routingStart.xMm, routingStart.yMm, snapToPcbGrid(rawX, gridStepMm), snapToPcbGrid(rawY, gridStepMm))
+      const snapped = snapTo45Degrees(
+        routingStart.xMm,
+        routingStart.yMm,
+        snapToPcbGrid(rawX, gridStepMm),
+        snapToPcbGrid(rawY, gridStepMm)
+      )
       routingCurrent = snapped
     }
   }
@@ -171,14 +176,14 @@
 
   function resetView() {
     zoom = 2.5
-    panX = 120
-    panY = 80
+    panX = 140
+    panY = 70
   }
 
   function fitToBoard() {
-    zoom = 3.2
-    panX = 80
-    panY = 60
+    zoom = 3.0
+    panX = 100
+    panY = 50
   }
 
   // ── Footprint Dragging ──────────────────────────────────────────────────────
@@ -317,18 +322,16 @@
   // ── Gerber & Export Triggers ────────────────────────────────────────────────
   function triggerGerberDownload() {
     const gerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces)
-    
-    // Download top copper and outline as text files
     for (const [filename, content] of Object.entries(gerbers)) {
       downloadFile(filename, content, "text/plain")
     }
-    exportSuccessMsg = "Gerber RS-274X berhasil di-generate! File dapat dikirim langsung ke JLCPCB / PCBWay."
+    exportSuccessMsg = "Gerber RS-274X berhasil di-generate! File siap dikirim ke JLCPCB / PCBWay."
   }
 
   function triggerEasyEdaExport() {
     const jsonDoc = exportToEasyEDAJson({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces)
     downloadFile("easyeda_pcb_project.json", JSON.stringify(jsonDoc, null, 2), "application/json")
-    exportSuccessMsg = "File EasyEDA Source JSON berhasil diunduh! Siap dibuka di EasyEDA Standard Editor."
+    exportSuccessMsg = "File EasyEDA Source JSON berhasil diunduh! Siap dibuka di EasyEDA Editor."
   }
 
   function triggerEtchingSvgExport(layer = 'bottom', inverted = false) {
@@ -362,121 +365,178 @@
       selectedTraceId = null
     } else if (e.key === 'r' || e.key === 'R') {
       rotateSelectedComponent(90)
+    } else if (e.key === 'v' || e.key === 'V') {
+      activeTool = 'select'
+    } else if (e.key === 'x' || e.key === 'X') {
+      activeTool = 'route'
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       deleteSelectedTrace()
     }
   }
+
+  onMount(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      showInspector = false
+    }
+  })
 </script>
 
 <svelte:window on:keydown={onKeyDown} />
 
 <!-- Main PCB Studio Container -->
-<div class="flex flex-col h-full w-full bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
+<div class="pcb-studio">
   
   <!-- 1. Top Ribbon Toolbar -->
-  <header class="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 shadow-md">
-    <div class="flex items-center gap-3">
-      <!-- Mode Switcher Back Button -->
-      <button on:click={returnToWiringView} class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center gap-2 transition">
-        <i class="fa-solid fa-arrow-left text-cyan-400"></i>
-        <span>Kembali ke Skematik</span>
+  <header class="pcb-ribbon">
+    <div class="pcb-ribbon-left">
+      <!-- Back to Schematic button -->
+      <button on:click={returnToWiringView} class="pcb-btn pcb-btn-back" title="Kembali ke Mode Skematik Kabel">
+        <span class="pcb-icon">←</span>
+        <span class="pcb-btn-text">Skematik</span>
       </button>
 
-      <div class="h-4 w-px bg-slate-700 mx-1"></div>
+      <div class="pcb-sep"></div>
 
-      <!-- View Title & Badge -->
-      <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs">
-          <i class="fa-solid fa-microchip"></i>
-        </div>
-        <span class="font-bold text-sm tracking-wide text-white">PCB Layout Editor</span>
-        <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-          EasyEDA CAD Engine
-        </span>
+      <!-- Studio Badge -->
+      <div class="pcb-title-wrap">
+        <span class="pcb-title-icon">🟩</span>
+        <span class="pcb-title-text">PCB Layout Studio</span>
+        <span class="pcb-engine-badge">EasyEDA Engine</span>
       </div>
     </div>
 
     <!-- Active Tool Group -->
-    <div class="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-      <button class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition {activeTool === 'select' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
-        on:click={() => activeTool = 'select'} title="Pilih & Geser Komponen (V)">
-        <i class="fa-solid fa-arrow-pointer"></i> Select
-      </button>
-      <button class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition {activeTool === 'route' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
-        on:click={() => activeTool = 'route'} title="Tarik Jalur Tembaga / Route Trace (X)">
-        <i class="fa-solid fa-route"></i> Route Trace
-      </button>
-      <button class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition {activeTool === 'via' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
-        on:click={() => activeTool = 'via'} title="Letakkan Lubang Tembus / Via (Shift+V)">
-        <i class="fa-regular fa-circle-dot"></i> Via
-      </button>
-    </div>
-
-    <!-- Layer & Trace Width Selector -->
-    <div class="flex items-center gap-3">
-      <!-- Layer Toggle: Top F.Cu (Red) vs Bottom B.Cu (Blue) -->
-      <div class="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700 text-xs">
-        <button class="px-2 py-1 rounded flex items-center gap-1 font-bold transition {activeLayer === 'top' ? 'bg-rose-600 text-white shadow' : 'text-rose-400 hover:bg-slate-700'}"
-          on:click={() => activeLayer = 'top'}>
-          <span class="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block"></span> Top Layer
+    <div class="pcb-ribbon-center">
+      <div class="pcb-tool-group">
+        <button
+          class="pcb-tool-btn"
+          class:pcb-tool-active={activeTool === 'select'}
+          on:click={() => activeTool = 'select'}
+          title="Select & Geser Komponen (Shortcut: V)"
+        >
+          <span>↖</span>
+          <span class="pcb-tool-lbl">Select</span>
         </button>
-        <button class="px-2 py-1 rounded flex items-center gap-1 font-bold transition {activeLayer === 'bottom' ? 'bg-blue-600 text-white shadow' : 'text-blue-400 hover:bg-slate-700'}"
-          on:click={() => activeLayer = 'bottom'}>
-          <span class="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block"></span> Bottom Layer
+
+        <button
+          class="pcb-tool-btn pcb-tool-route"
+          class:pcb-tool-active={activeTool === 'route'}
+          on:click={() => activeTool = 'route'}
+          title="Tarik Jalur Tembaga / Route Trace 45° (Shortcut: X)"
+        >
+          <span>⚡</span>
+          <span class="pcb-tool-lbl">Route Trace</span>
+        </button>
+
+        <button
+          class="pcb-tool-btn"
+          class:pcb-tool-active={activeTool === 'via'}
+          on:click={() => activeTool = 'via'}
+          title="Letakkan Via Lubang Tembus"
+        >
+          <span>◎</span>
+          <span class="pcb-tool-lbl">Via</span>
         </button>
       </div>
 
-      <!-- Trace Width -->
-      <div class="flex items-center gap-1.5 text-xs text-slate-400">
-        <span>Lebar:</span>
-        <select bind:value={activeTraceWidth} class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500">
-          <option value={0.25}>0.25 mm (Sinyal Halus)</option>
+      <div class="pcb-sep"></div>
+
+      <!-- Layer Toggle (Top F.Cu vs Bottom B.Cu) -->
+      <div class="pcb-layer-group">
+        <button
+          class="pcb-layer-btn pcb-layer-top"
+          class:pcb-layer-active={activeLayer === 'top'}
+          on:click={() => activeLayer = 'top'}
+          title="Top Copper Layer (F.Cu - Merah)"
+        >
+          <span class="pcb-layer-dot pcb-dot-top"></span>
+          <span>Top (F.Cu)</span>
+        </button>
+
+        <button
+          class="pcb-layer-btn pcb-layer-bottom"
+          class:pcb-layer-active={activeLayer === 'bottom'}
+          on:click={() => activeLayer = 'bottom'}
+          title="Bottom Copper Layer (B.Cu - Biru)"
+        >
+          <span class="pcb-layer-dot pcb-dot-bottom"></span>
+          <span>Bottom (B.Cu)</span>
+        </button>
+      </div>
+
+      <!-- Trace Width Selector -->
+      <div class="pcb-select-wrap" title="Ketebalan Jalur Tembaga">
+        <span class="pcb-select-label">Lebar:</span>
+        <select bind:value={activeTraceWidth} class="pcb-select">
+          <option value={0.25}>0.25 mm (Sinyal)</option>
           <option value={0.40}>0.40 mm (Standar IC)</option>
           <option value={0.80}>0.80 mm (Daya / VCC)</option>
           <option value={1.20}>1.20 mm (GND Berat)</option>
         </select>
       </div>
 
-      <!-- Grid Selector -->
-      <div class="flex items-center gap-1.5 text-xs text-slate-400">
-        <span>Grid:</span>
-        <select bind:value={gridStepMm} class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500">
+      <!-- Grid Snap Selector -->
+      <div class="pcb-select-wrap" title="Ukuran Grid Snapping CAD">
+        <span class="pcb-select-label">Grid:</span>
+        <select bind:value={gridStepMm} class="pcb-select">
           <option value={2.54}>2.54 mm (100 mil)</option>
           <option value={1.27}>1.27 mm (50 mil)</option>
           <option value={0.635}>0.635 mm (25 mil)</option>
         </select>
       </div>
+    </div>
+
+    <!-- Right Actions -->
+    <div class="pcb-ribbon-right">
+      <!-- Rotate button -->
+      <button on:click={() => rotateSelectedComponent(90)} class="pcb-btn" title="Putar Komponen Terpilih 90° (Shortcut: R)">
+        <span>↻</span>
+        <span class="pcb-btn-text">Putar 90°</span>
+      </button>
+
+      <!-- Toggle Inspector -->
+      <button
+        on:click={() => showInspector = !showInspector}
+        class="pcb-btn"
+        class:pcb-btn-active={showInspector}
+        title="Buka / Tutup Panel Inspektur PCB"
+      >
+        <span>⚙</span>
+        <span class="pcb-btn-text">Inspector</span>
+      </button>
 
       <!-- Export Button -->
-      <button on:click={() => showExportModal = true} class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md transition">
-        <i class="fa-solid fa-file-export"></i>
-        <span>Ekspor Fabrikasi</span>
+      <button on:click={() => showExportModal = true} class="pcb-btn pcb-btn-export" title="Ekspor Gerber, EasyEDA JSON, dan Masker Cetak">
+        <span>📦</span>
+        <span class="pcb-btn-text">Ekspor Fabrikasi</span>
       </button>
     </div>
   </header>
 
   <!-- 2. Main Workspace Body (Canvas + Properties Panel) -->
-  <div class="flex-1 flex overflow-hidden relative">
+  <div class="pcb-body">
 
-    <!-- Interactive SVG PCB Canvas -->
+    <!-- Interactive SVG PCB Canvas Container -->
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="flex-1 relative bg-slate-950 overflow-hidden cursor-crosshair"
+    <div
+      class="pcb-canvas-area"
       on:wheel={handleWheel}
       on:mousedown={startPan}
       on:mousemove={onMouseMove}
       on:mouseup={stopPan}
-      on:click={handleCanvasClick}>
-
+      on:click={handleCanvasClick}
+    >
       <!-- Canvas SVG Surface -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <svg class="w-full h-full select-none"
+      <svg
+        class="pcb-svg"
         on:pointermove={onBoardPointerMove}
-        on:pointerup={onBoardPointerUp}>
-        
+        on:pointerup={onBoardPointerUp}
+      >
         <defs>
           <!-- PCB Grid Pattern -->
           <pattern id="pcb-grid-pattern" width={gridStepMm * zoom} height={gridStepMm * zoom} patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="0.8" fill="#334155" opacity="0.6" />
+            <circle cx="1" cy="1" r="0.75" fill="#334155" opacity="0.65" />
           </pattern>
         </defs>
 
@@ -489,20 +549,30 @@
           <!-- A. The Physical PCB Board (Green Soldermask) -->
           <g id="pcb-board">
             <!-- Green Board Substrate -->
-            <rect x="0" y="0" width={boardWidthMm} height={boardHeightMm} rx="2.5" ry="2.5"
-              fill="#062e17" stroke="#eab308" stroke-width="0.35" class="shadow-2xl" />
+            <rect
+              x="0"
+              y="0"
+              width={boardWidthMm}
+              height={boardHeightMm}
+              rx="2.5"
+              ry="2.5"
+              fill="#062e17"
+              stroke="#eab308"
+              stroke-width="0.35"
+              filter="drop-shadow(0 12px 28px rgba(0,0,0,0.8))"
+            />
             
             <!-- Silkscreen Header Title -->
             {#if showSilkscreen}
-              <text x="5" y="6" font-size="2.4" font-family="monospace" font-weight="bold" fill="#ffffff" opacity="0.75">
-                ALTURA PCB v1.0 — {boardWidthMm}x{boardHeightMm}mm
+              <text x="5" y="6" font-size="2.4" font-family="monospace" font-weight="bold" fill="#ffffff" opacity="0.8">
+                CIRCUIT-CRAFT PCB v1.0 — {boardWidthMm}x{boardHeightMm}mm
               </text>
             {/if}
           </g>
 
-          <!-- B. Ratsnest Air-Wires (Dashed Yellow/White Connectivity Guides) -->
+          <!-- B. Ratsnest Air-Wires (Dashed Yellow Connectivity Guides) -->
           {#if showRatsnest}
-            <g id="ratsnest-layer" stroke="#facc15" stroke-width="0.18" stroke-dasharray="0.8, 0.8" opacity="0.75" pointer-events="none">
+            <g id="ratsnest-layer" stroke="#facc15" stroke-width="0.22" stroke-dasharray="0.8, 0.8" opacity="0.85" pointer-events="none">
               {#each ratsnestLines as r}
                 <line x1={r.x1} y1={r.y1} x2={r.x2} y2={r.y2} />
               {/each}
@@ -515,12 +585,14 @@
               {#each copperTraces.filter(t => t.layer === 'bottom') as trace}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <line x1={trace.x1} y1={trace.y1} x2={trace.x2} y2={trace.y2}
+                <line
+                  x1={trace.x1} y1={trace.y1} x2={trace.x2} y2={trace.y2}
                   stroke={selectedTraceId === trace.id ? '#60a5fa' : '#2563eb'}
                   stroke-width={trace.widthMm}
                   stroke-linecap="round"
                   on:click={(e) => { e.stopPropagation(); selectedTraceId = trace.id; selectedCompId = null }}
-                  class="cursor-pointer transition-all hover:stroke-cyan-300" />
+                  class="pcb-trace"
+                />
               {/each}
             </g>
           {/if}
@@ -531,24 +603,28 @@
               {#each copperTraces.filter(t => t.layer === 'top') as trace}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <line x1={trace.x1} y1={trace.y1} x2={trace.x2} y2={trace.y2}
+                <line
+                  x1={trace.x1} y1={trace.y1} x2={trace.x2} y2={trace.y2}
                   stroke={selectedTraceId === trace.id ? '#f87171' : '#dc2626'}
                   stroke-width={trace.widthMm}
                   stroke-linecap="round"
                   on:click={(e) => { e.stopPropagation(); selectedTraceId = trace.id; selectedCompId = null }}
-                  class="cursor-pointer transition-all hover:stroke-rose-300" />
+                  class="pcb-trace"
+                />
               {/each}
             </g>
           {/if}
 
           <!-- E. Active In-Progress Routing Line -->
           {#if routingStart && routingCurrent}
-            <line x1={routingStart.xMm} y1={routingStart.yMm} x2={routingCurrent.xMm} y2={routingCurrent.yMm}
+            <line
+              x1={routingStart.xMm} y1={routingStart.yMm} x2={routingCurrent.xMm} y2={routingCurrent.yMm}
               stroke={activeLayer === 'top' ? '#f43f5e' : '#38bdf8'}
               stroke-width={activeTraceWidth}
               stroke-dasharray="0.6, 0.4"
               stroke-linecap="round"
-              pointer-events="none" />
+              pointer-events="none"
+            />
           {/if}
 
           <!-- F. Component Footprints (Silkscreen + Through-hole / SMD Pads) -->
@@ -558,20 +634,28 @@
               {@const isSel = selectedCompId === comp.instanceId}
               
               <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <g transform="translate({comp.xMm}, {comp.yMm}) rotate({comp.rotation || 0})"
+              <g
+                transform="translate({comp.xMm}, {comp.yMm}) rotate({comp.rotation || 0})"
                 on:mousedown={(e) => startDragComp(e, comp)}
-                class="cursor-move">
-                
+                class="pcb-comp-group"
+              >
                 <!-- Selection Highlight Bounding Box -->
                 {#if isSel}
-                  <rect x={-fp.widthMm / 2 - 1.5} y={-fp.heightMm / 2 - 1.5}
-                    width={fp.widthMm + 3} height={fp.heightMm + 3}
-                    fill="none" stroke="#38bdf8" stroke-width="0.3" stroke-dasharray="1.2, 0.8" />
+                  <rect
+                    x={-fp.widthMm / 2 - 1.5}
+                    y={-fp.heightMm / 2 - 1.5}
+                    width={fp.widthMm + 3}
+                    height={fp.heightMm + 3}
+                    fill="rgba(56, 189, 248, 0.08)"
+                    stroke="#38bdf8"
+                    stroke-width="0.35"
+                    stroke-dasharray="1.2, 0.8"
+                  />
                 {/if}
 
                 <!-- Silkscreen Geometry (White outline & component markings) -->
                 {#if showSilkscreen}
-                  <g stroke="#ffffff" stroke-width="0.22" fill="none" opacity="0.85" pointer-events="none">
+                  <g stroke="#ffffff" stroke-width="0.22" fill="none" opacity="0.88" pointer-events="none">
                     {#each (fp.silkscreen || []) as s}
                       {#if s.type === 'rect'}
                         <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={s.r || 0} />
@@ -595,23 +679,42 @@
                 <!-- Pads (Annular Copper Rings with Drill Hole) -->
                 {#each fp.pads as pad}
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <g class="cursor-pointer"
-                    on:click={(e) => handlePadClick(e, comp, pad, comp.xMm + pad.x, comp.yMm + pad.y)}>
-                    
+                  <g
+                    class="pcb-pad-group"
+                    on:click={(e) => handlePadClick(e, comp, pad, comp.xMm + pad.x, comp.yMm + pad.y)}
+                  >
                     <!-- Copper Pad (Gold / Solder finish) -->
                     {#if pad.shape === 'rect'}
-                      <rect x={pad.x - pad.sizeMm / 2} y={pad.y - pad.sizeMm / 2}
-                        width={pad.sizeMm} height={pad.sizeMm} rx="0.1"
-                        fill="#fbbf24" stroke="#d97706" stroke-width="0.15" />
+                      <rect
+                        x={pad.x - pad.sizeMm / 2}
+                        y={pad.y - pad.sizeMm / 2}
+                        width={pad.sizeMm}
+                        height={pad.sizeMm}
+                        rx="0.1"
+                        fill="#fbbf24"
+                        stroke="#d97706"
+                        stroke-width="0.15"
+                      />
                     {:else}
-                      <circle cx={pad.x} cy={pad.y} r={pad.sizeMm / 2}
-                        fill="#fbbf24" stroke="#d97706" stroke-width="0.15" />
+                      <circle
+                        cx={pad.x}
+                        cy={pad.y}
+                        r={pad.sizeMm / 2}
+                        fill="#fbbf24"
+                        stroke="#d97706"
+                        stroke-width="0.15"
+                      />
                     {/if}
 
                     <!-- Drill Hole (Dark Center) -->
                     {#if pad.drillMm}
-                      <circle cx={pad.x} cy={pad.y} r={pad.drillMm / 2}
-                        fill="#03160b" pointer-events="none" />
+                      <circle
+                        cx={pad.x}
+                        cy={pad.y}
+                        r={pad.drillMm / 2}
+                        fill="#03160b"
+                        pointer-events="none"
+                      />
                     {/if}
 
                     <!-- Pin Number Tooltip -->
@@ -626,98 +729,131 @@
         </g>
       </svg>
 
-      <!-- Bottom Floating Stats & DRC Pill -->
-      <div class="absolute bottom-4 left-4 flex items-center gap-2 bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-800 shadow-xl text-xs">
-        <div class="flex items-center gap-1.5">
-          <span class="w-2.5 h-2.5 rounded-full {drcResults.ok ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}"></span>
-          <span class="font-bold text-slate-200">
-            {drcResults.ok ? 'Status: 100% Terhubung (No Ratsnest)' : `Belum Terhubung: ${drcResults.unroutedCount} jalur`}
+      <!-- Bottom-Left HUD: DRC Status, Zoom, and Fit View -->
+      <div class="pcb-hud pcb-hud-bottom-left">
+        <div class="pcb-drc-status">
+          <span class="pcb-status-dot" class:pcb-dot-ok={drcResults.ok} class:pcb-dot-warn={!drcResults.ok}></span>
+          <span class="pcb-status-text">
+            {drcResults.ok ? 'DRC: 100% Terhubung' : `Belum Terhubung: ${drcResults.unroutedCount} jalur`}
           </span>
         </div>
-        <span class="text-slate-600">•</span>
-        <span class="text-slate-400 font-mono">Zoom: {Math.round(zoom * 30)}%</span>
-        <span class="text-slate-600">•</span>
-        <button on:click={fitToBoard} class="text-cyan-400 hover:underline">Fit Board</button>
+        <span class="pcb-hud-sep">•</span>
+        <span class="pcb-hud-zoom font-mono">Zoom: {Math.round(zoom * 30)}%</span>
+        <span class="pcb-hud-sep">•</span>
+        <button on:click={fitToBoard} class="pcb-link-btn">Fit Board</button>
+        <span class="pcb-hud-sep">•</span>
+        <button on:click={resetView} class="pcb-link-btn">Reset</button>
       </div>
 
-      <!-- Quick Canvas Overlay Controls (Top Right) -->
-      <div class="absolute top-4 right-4 flex flex-col gap-1.5 bg-slate-900/90 backdrop-blur p-2 rounded-xl border border-slate-800 shadow-xl text-xs">
-        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
-          <input type="checkbox" bind:checked={showRatsnest} class="rounded bg-slate-800 border-slate-700 text-yellow-500" />
-          <span>Garis Pandu (Ratsnest)</span>
+      <!-- Bottom-Center Routing Guide Hint -->
+      {#if activeTool === 'route'}
+        <div class="pcb-hud pcb-hud-center">
+          <span class="pcb-route-tip">
+            {#if !routingStart}
+              ⚡ Klik pad komponen untuk mulai menarik jalur tembaga
+            {:else}
+              📍 Klik titik belokan (45°) atau klik pad target untuk menyelesaikan
+            {/if}
+          </span>
+        </div>
+      {/if}
+
+      <!-- Top-Right HUD: Layer Visibility Switches -->
+      <div class="pcb-hud pcb-hud-top-right">
+        <label class="pcb-toggle-row">
+          <input type="checkbox" bind:checked={showRatsnest} class="pcb-chk" />
+          <span class="pcb-toggle-lbl">Garis Pandu (Ratsnest)</span>
         </label>
-        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
-          <input type="checkbox" bind:checked={showSilkscreen} class="rounded bg-slate-800 border-slate-700 text-white" />
-          <span>Silkscreen Komponen</span>
+        <label class="pcb-toggle-row">
+          <input type="checkbox" bind:checked={showSilkscreen} class="pcb-chk" />
+          <span class="pcb-toggle-lbl">Silkscreen Putih</span>
         </label>
-        <label class="flex items-center gap-2 text-rose-300 cursor-pointer">
-          <input type="checkbox" bind:checked={showTopCopper} class="rounded bg-slate-800 border-slate-700 text-rose-500" />
-          <span>Jalur Tembaga Atas (F.Cu)</span>
+        <label class="pcb-toggle-row pcb-toggle-top">
+          <input type="checkbox" bind:checked={showTopCopper} class="pcb-chk" />
+          <span class="pcb-toggle-lbl">Top Copper (F.Cu)</span>
         </label>
-        <label class="flex items-center gap-2 text-blue-300 cursor-pointer">
-          <input type="checkbox" bind:checked={showBottomCopper} class="rounded bg-slate-800 border-slate-700 text-blue-500" />
-          <span>Jalur Tembaga Bawah (B.Cu)</span>
+        <label class="pcb-toggle-row pcb-toggle-bottom">
+          <input type="checkbox" bind:checked={showBottomCopper} class="pcb-chk" />
+          <span class="pcb-toggle-lbl">Bottom Copper (B.Cu)</span>
         </label>
       </div>
 
     </div>
 
-    <!-- Right Sidebar Properties & Actions Panel -->
-    <aside class="w-64 bg-slate-900 border-l border-slate-800 p-4 flex flex-col gap-4 overflow-y-auto shrink-0 text-xs">
-      <div>
-        <h3 class="font-bold text-slate-200 text-sm mb-1">Dimensi Papan PCB</h3>
-        <p class="text-slate-400 text-[11px] mb-3">Atur ukuran fisik papan dalam milimeter.</p>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label for="input-board-width" class="text-slate-400 block text-[10px] mb-1">Lebar (mm)</label>
-            <input id="input-board-width" type="number" bind:value={boardWidthMm} min="30" max="300"
-              class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100 font-mono" />
-          </div>
-          <div>
-            <label for="input-board-height" class="text-slate-400 block text-[10px] mb-1">Panjang (mm)</label>
-            <input id="input-board-height" type="number" bind:value={boardHeightMm} min="30" max="300"
-              class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100 font-mono" />
+    <!-- Right Sidebar Inspector Panel -->
+    {#if showInspector}
+      <aside class="pcb-inspector">
+        <!-- Panel Header -->
+        <div class="pcb-insp-head">
+          <span class="pcb-insp-title">Inspector PCB</span>
+          <button class="pcb-close-btn" on:click={() => showInspector = false}>✕</button>
+        </div>
+
+        <!-- Section 1: Board Dimensions -->
+        <div class="pcb-card">
+          <h4 class="pcb-card-title">Dimensi Papan PCB</h4>
+          <p class="pcb-card-desc">Ukuran fisik papan substrat FR-4 (mm).</p>
+          <div class="pcb-form-grid">
+            <div class="pcb-field">
+              <label for="board-w" class="pcb-field-lbl">Lebar (mm)</label>
+              <input id="board-w" type="number" bind:value={boardWidthMm} min="30" max="350" class="pcb-input font-mono" />
+            </div>
+            <div class="pcb-field">
+              <label for="board-h" class="pcb-field-lbl">Panjang (mm)</label>
+              <input id="board-h" type="number" bind:value={boardHeightMm} min="30" max="350" class="pcb-input font-mono" />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="border-t border-slate-800 pt-3">
-        <h3 class="font-bold text-slate-200 text-sm mb-2">Aksi Cepat Komponen</h3>
-        {#if selectedCompId}
-          {@const sel = pcbComponents.find(c => c.instanceId === selectedCompId)}
-          <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700 space-y-2">
-            <div class="font-bold text-cyan-400 truncate">{sel?.label || sel?.name}</div>
-            <div class="text-[10px] text-slate-400">Rotasi: {sel?.rotation || 0}&deg;</div>
-            <button on:click={() => rotateSelectedComponent(90)} class="w-full py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white font-semibold flex items-center justify-center gap-1.5 transition">
-              <i class="fa-solid fa-rotate"></i> Putar 90&deg; (R)
+        <!-- Section 2: Selected Component -->
+        <div class="pcb-card">
+          <h4 class="pcb-card-title">Komponen Terpilih</h4>
+          {#if selectedCompId}
+            {@const sel = pcbComponents.find(c => c.instanceId === selectedCompId)}
+            <div class="pcb-selected-box">
+              <div class="pcb-sel-name">{sel?.label || sel?.name}</div>
+              <div class="pcb-sel-meta">Footprint: {sel?.footprint?.name || 'Standard'}</div>
+              <div class="pcb-sel-meta">Rotasi: {sel?.rotation || 0}° | Posisi: X={sel?.xMm}mm Y={sel?.yMm}mm</div>
+              <button on:click={() => rotateSelectedComponent(90)} class="pcb-btn pcb-btn-full">
+                <span>↻</span>
+                <span>Putar 90° (R)</span>
+              </button>
+            </div>
+          {:else}
+            <div class="pcb-empty-hint">
+              Klik komponen di atas kanvas PCB untuk mengatur posisi dan rotasi.
+            </div>
+          {/if}
+        </div>
+
+        <!-- Section 3: Copper Traces Management -->
+        <div class="pcb-card">
+          <h4 class="pcb-card-title">Jalur Tembaga</h4>
+          <div class="pcb-stat-row">
+            <span>Total Segmen:</span>
+            <span class="pcb-stat-val">{copperTraces.length} segmen</span>
+          </div>
+          {#if selectedTraceId}
+            <button on:click={deleteSelectedTrace} class="pcb-btn pcb-btn-danger pcb-btn-full" style="margin-bottom: 8px;">
+              <span>🗑</span>
+              <span>Hapus Jalur Dipilih (Del)</span>
             </button>
-          </div>
-        {:else}
-          <div class="p-3 text-center text-slate-500 rounded-xl bg-slate-950/40 border border-slate-800">
-            Klik komponen pada PCB untuk memilih & memutar.
-          </div>
-        {/if}
-      </div>
-
-      <div class="border-t border-slate-800 pt-3">
-        <h3 class="font-bold text-slate-200 text-sm mb-2">Manajemen Jalur Tembaga</h3>
-        <div class="text-slate-400 mb-2">Total segmen: <span class="font-mono text-white font-bold">{copperTraces.length}</span></div>
-        {#if selectedTraceId}
-          <button on:click={deleteSelectedTrace} class="w-full py-1.5 mb-2 rounded bg-rose-600/80 hover:bg-rose-500 text-white font-semibold flex items-center justify-center gap-1.5 transition">
-            <i class="fa-solid fa-trash"></i> Hapus Jalur Dipilih
+          {/if}
+          <button on:click={clearAllTraces} class="pcb-btn pcb-btn-full">
+            <span>🧹</span>
+            <span>Bersihkan Semua Jalur</span>
           </button>
-        {/if}
-        <button on:click={clearAllTraces} class="w-full py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold flex items-center justify-center gap-1.5 transition">
-          <i class="fa-solid fa-eraser"></i> Bersihkan Semua Jalur
-        </button>
-      </div>
+        </div>
 
-      <div class="border-t border-slate-800 pt-3 mt-auto">
-        <button on:click={() => showExportModal = true} class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition">
-          <i class="fa-solid fa-download"></i> Ekspor Gerber & EasyEDA
-        </button>
-      </div>
-    </aside>
+        <!-- Section 4: Export Action -->
+        <div class="pcb-card pcb-card-action">
+          <button on:click={() => showExportModal = true} class="pcb-btn pcb-btn-export pcb-btn-full pcb-btn-lg">
+            <span>📦</span>
+            <span>Ekspor Gerber & EasyEDA</span>
+          </button>
+        </div>
+      </aside>
+    {/if}
 
   </div>
 
@@ -725,78 +861,76 @@
   {#if showExportModal}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
-      on:click={() => showExportModal = false}>
-      
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4"
-        on:click|stopPropagation>
+    <div class="pcb-modal-backdrop" on:click={() => showExportModal = false}>
+      <div class="pcb-modal-box" on:click|stopPropagation>
         
-        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm">
-              <i class="fa-solid fa-file-export"></i>
-            </div>
+        <!-- Modal Header -->
+        <div class="pcb-modal-head">
+          <div class="pcb-modal-title-group">
+            <span class="pcb-modal-icon">📦</span>
             <div>
-              <h2 class="font-bold text-base text-white">Ekspor File Produksi PCB</h2>
-              <p class="text-slate-400 text-xs">Pilih format fabrikasi atau cetak DIY.</p>
+              <h3 class="pcb-modal-title">Ekspor Produksi PCB</h3>
+              <p class="pcb-modal-desc">Pilih format industri untuk pabrikasi atau cetak DIY skala 1:1.</p>
             </div>
           </div>
-          <button on:click={() => showExportModal = false} class="text-slate-400 hover:text-white text-base">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
+          <button on:click={() => showExportModal = false} class="pcb-modal-close" aria-label="Tutup Modal">✕</button>
         </div>
 
+        <!-- Notification Alert -->
         {#if exportSuccessMsg}
-          <div class="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs flex items-center gap-2">
-            <i class="fa-solid fa-circle-check text-emerald-400 shrink-0"></i>
+          <div class="pcb-alert-success">
+            <span>✓</span>
             <span>{exportSuccessMsg}</span>
           </div>
         {/if}
 
-        <div class="space-y-2.5">
-          <!-- Option A: Gerber RS-274X -->
-          <div class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/80 hover:border-emerald-500/50 transition">
-            <div class="font-bold text-slate-100 flex items-center justify-between">
-              <span>Paket Gerber RS-274X + Drill</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Pabrik PCB</span>
+        <!-- Cards Group -->
+        <div class="pcb-export-cards">
+          <!-- Card 1: Gerber RS-274X -->
+          <div class="pcb-export-card">
+            <div class="pcb-card-head">
+              <span class="pcb-card-label">Paket Gerber RS-274X + Excellon</span>
+              <span class="pcb-card-tag pcb-tag-green">Pabrik PCB</span>
             </div>
-            <p class="text-[11px] text-slate-400 mt-1 mb-2.5">
-              Standar industri untuk cetak di JLCPCB, PCBWay, dll. Mencakup file GTL, GBL, GKO, dan DRL.
+            <p class="pcb-card-text">
+              Standar industri untuk pesanan di JLCPCB, PCBWay, dsb. Mencakup Top Copper (.gtl), Bottom (.gbl), Outline (.gko), dan Drill (.drl).
             </p>
-            <button on:click={triggerGerberDownload} class="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5">
-              <i class="fa-solid fa-download"></i> Unduh File Gerber (.gtl, .gbl, .drl)
+            <button on:click={triggerGerberDownload} class="pcb-btn pcb-btn-primary pcb-btn-full">
+              <span>⬇</span>
+              <span>Unduh File Gerber (.gtl, .gbl, .drl)</span>
             </button>
           </div>
 
-          <!-- Option B: EasyEDA Standard JSON -->
-          <div class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/80 hover:border-cyan-500/50 transition">
-            <div class="font-bold text-slate-100 flex items-center justify-between">
-              <span>EasyEDA Source Project</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">JSON</span>
+          <!-- Card 2: EasyEDA Source JSON -->
+          <div class="pcb-export-card">
+            <div class="pcb-card-head">
+              <span class="pcb-card-label">EasyEDA Standard Project</span>
+              <span class="pcb-card-tag pcb-tag-blue">JSON</span>
             </div>
-            <p class="text-[11px] text-slate-400 mt-1 mb-2.5">
-              Format kompatibel langsung dengan editor EasyEDA. Bisa langsung di-import & diedit ulang.
+            <p class="pcb-card-text">
+              Format kompatibel langsung dengan EasyEDA Web / Desktop Editor. Siap diimpor dan diedit ulang kapan saja.
             </p>
-            <button on:click={triggerEasyEdaExport} class="w-full py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5">
-              <i class="fa-solid fa-file-code"></i> Unduh Format EasyEDA (.json)
+            <button on:click={triggerEasyEdaExport} class="pcb-btn pcb-btn-secondary pcb-btn-full">
+              <span>📄</span>
+              <span>Unduh Format EasyEDA (.json)</span>
             </button>
           </div>
 
-          <!-- Option C: DIY 1:1 Scale SVG Print Mask -->
-          <div class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/80 hover:border-amber-500/50 transition">
-            <div class="font-bold text-slate-100 flex items-center justify-between">
-              <span>Masker Sablon DIY 1:1 Skala Riil</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 font-mono">SVG 1:1</span>
+          <!-- Card 3: DIY Etching SVG -->
+          <div class="pcb-export-card">
+            <div class="pcb-card-head">
+              <span class="pcb-card-label">Masker Cetak Sablon / Setrika DIY</span>
+              <span class="pcb-card-tag pcb-tag-amber">Skala 1:1</span>
             </div>
-            <p class="text-[11px] text-slate-400 mt-1 mb-2.5">
-              File vektor SVG hitam-putih skala 1:1 milimeter presisi untuk metode setrika toner transfer atau sablon PCB sendiri.
+            <p class="pcb-card-text">
+              File vektor SVG hitam-putih skala 1:1 milimeter presisi untuk metode setrika toner transfer atau sablon feriklorida ($FeCl_3$).
             </p>
-            <div class="flex gap-2">
-              <button on:click={() => triggerEtchingSvgExport('bottom', false)} class="flex-1 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs transition">
-                Jalur Bawah (B.Cu)
+            <div class="pcb-export-btn-row">
+              <button on:click={() => triggerEtchingSvgExport('bottom', false)} class="pcb-btn pcb-btn-full">
+                <span>Jalur Normal (B.Cu)</span>
               </button>
-              <button on:click={() => triggerEtchingSvgExport('bottom', true)} class="flex-1 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs transition">
-                Inverted (Negatif)
+              <button on:click={() => triggerEtchingSvgExport('bottom', true)} class="pcb-btn pcb-btn-full">
+                <span>Inverted (Negatif)</span>
               </button>
             </div>
           </div>
@@ -807,3 +941,730 @@
   {/if}
 
 </div>
+
+<style>
+  /* ── Core Studio Container ── */
+  .pcb-studio {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    background: #090d16;
+    color: #e2e8f0;
+    user-select: none;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  /* ── Ribbon Toolbar ── */
+  .pcb-ribbon {
+    height: 44px;
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    gap: 8px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    z-index: 30;
+    overflow-x: auto;
+  }
+  .pcb-ribbon::-webkit-scrollbar { display: none; }
+
+  .pcb-ribbon-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .pcb-ribbon-center {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .pcb-ribbon-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .pcb-sep {
+    width: 1px;
+    height: 20px;
+    background: #1e293b;
+  }
+
+  /* Title & Badges */
+  .pcb-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pcb-title-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+  }
+  .pcb-engine-badge {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    letter-spacing: 0.4px;
+  }
+
+  /* Buttons */
+  .pcb-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .pcb-btn:hover {
+    background: #334155;
+    color: #ffffff;
+    border-color: #475569;
+  }
+  .pcb-btn-active {
+    background: #0369a1;
+    color: #ffffff;
+    border-color: #38bdf8;
+  }
+  .pcb-btn-back {
+    background: #1e293b;
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+  .pcb-btn-back:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+  }
+  .pcb-btn-export {
+    background: #059669;
+    color: #ffffff;
+    border-color: #10b981;
+    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+  }
+  .pcb-btn-export:hover {
+    background: #10b981;
+  }
+  .pcb-btn-primary {
+    background: #059669;
+    color: #ffffff;
+    border-color: #10b981;
+  }
+  .pcb-btn-primary:hover {
+    background: #10b981;
+  }
+  .pcb-btn-secondary {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #38bdf8;
+  }
+  .pcb-btn-secondary:hover {
+    background: #0369a1;
+  }
+  .pcb-btn-danger {
+    background: rgba(225, 29, 72, 0.2);
+    color: #f43f5e;
+    border-color: rgba(225, 29, 72, 0.4);
+  }
+  .pcb-btn-danger:hover {
+    background: #e11d48;
+    color: #ffffff;
+  }
+  .pcb-btn-full {
+    width: 100%;
+  }
+  .pcb-btn-lg {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  /* Tool Buttons */
+  .pcb-tool-group {
+    display: flex;
+    align-items: center;
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 7px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .pcb-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .pcb-tool-btn:hover {
+    background: #1e293b;
+    color: #ffffff;
+  }
+  .pcb-tool-btn.pcb-tool-active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+  }
+  .pcb-tool-route.pcb-tool-active {
+    background: #059669;
+    border-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+  }
+
+  /* Layers Toggle Group */
+  .pcb-layer-group {
+    display: flex;
+    align-items: center;
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 7px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .pcb-layer-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .pcb-layer-top {
+    color: #f87171;
+  }
+  .pcb-layer-bottom {
+    color: #60a5fa;
+  }
+  .pcb-layer-btn:hover {
+    background: #1e293b;
+  }
+  .pcb-layer-top.pcb-layer-active {
+    background: #dc2626;
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.4);
+  }
+  .pcb-layer-bottom.pcb-layer-active {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
+  }
+  .pcb-layer-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .pcb-dot-top { background: #f87171; }
+  .pcb-dot-bottom { background: #60a5fa; }
+  .pcb-layer-active .pcb-layer-dot { background: #ffffff; }
+
+  /* Dropdown Selects */
+  .pcb-select-wrap {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .pcb-select-label {
+    font-weight: 600;
+  }
+  .pcb-select {
+    background: #090d16;
+    border: 1px solid #334155;
+    border-radius: 5px;
+    color: #f1f5f9;
+    font-size: 11px;
+    padding: 3px 6px;
+    outline: none;
+    cursor: pointer;
+  }
+  .pcb-select:focus {
+    border-color: #38bdf8;
+  }
+
+  /* ── Body & Canvas ── */
+  .pcb-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .pcb-canvas-area {
+    flex: 1;
+    position: relative;
+    background: #060911;
+    overflow: hidden;
+    cursor: crosshair;
+  }
+
+  .pcb-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .pcb-comp-group {
+    cursor: grab;
+  }
+  .pcb-comp-group:active {
+    cursor: grabbing;
+  }
+  .pcb-pad-group {
+    cursor: pointer;
+  }
+  .pcb-pad-group:hover circle, .pcb-pad-group:hover rect {
+    filter: brightness(1.3);
+  }
+  .pcb-trace {
+    cursor: pointer;
+    transition: stroke 0.1s;
+  }
+  .pcb-trace:hover {
+    filter: brightness(1.4);
+  }
+
+  /* ── Floating HUD Elements ── */
+  .pcb-hud {
+    position: absolute;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(51, 65, 85, 0.8);
+    border-radius: 9px;
+    padding: 6px 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    z-index: 10;
+  }
+
+  .pcb-hud-bottom-left {
+    bottom: 12px;
+    left: 12px;
+  }
+
+  .pcb-hud-center {
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(5, 150, 105, 0.9);
+    border-color: #10b981;
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  }
+
+  .pcb-hud-top-right {
+    top: 12px;
+    right: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+
+  .pcb-hud-sep {
+    color: #475569;
+  }
+  .pcb-hud-zoom {
+    color: #94a3b8;
+  }
+
+  .pcb-drc-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pcb-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .pcb-dot-ok {
+    background: #10b981;
+    box-shadow: 0 0 6px #10b981;
+  }
+  .pcb-dot-warn {
+    background: #f59e0b;
+    box-shadow: 0 0 6px #f59e0b;
+    animation: pcb-pulse 1.2s infinite;
+  }
+  @keyframes pcb-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  .pcb-status-text {
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+
+  .pcb-link-btn {
+    background: none;
+    border: none;
+    color: #38bdf8;
+    cursor: pointer;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 0;
+  }
+  .pcb-link-btn:hover {
+    text-decoration: underline;
+  }
+
+  .pcb-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    font-size: 11px;
+    color: #cbd5e1;
+  }
+  .pcb-toggle-row:hover {
+    color: #ffffff;
+  }
+  .pcb-toggle-top { color: #f87171; }
+  .pcb-toggle-bottom { color: #60a5fa; }
+  .pcb-chk {
+    cursor: pointer;
+    accent-color: #0284c7;
+  }
+
+  /* ── Right Inspector Panel ── */
+  .pcb-inspector {
+    width: 270px;
+    background: #0f172a;
+    border-left: 1px solid #1e293b;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    z-index: 20;
+  }
+
+  .pcb-insp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .pcb-insp-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .pcb-close-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .pcb-close-btn:hover {
+    color: #ffffff;
+  }
+
+  .pcb-card {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pcb-card-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+  .pcb-card-desc {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+  }
+
+  .pcb-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .pcb-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .pcb-field-lbl {
+    font-size: 10px;
+    color: #94a3b8;
+  }
+  .pcb-input {
+    background: #090d16;
+    border: 1px solid #334155;
+    border-radius: 5px;
+    padding: 4px 6px;
+    color: #f1f5f9;
+    font-size: 11px;
+  }
+  .pcb-input:focus {
+    border-color: #38bdf8;
+    outline: none;
+  }
+
+  .pcb-selected-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px;
+  }
+  .pcb-sel-name {
+    font-weight: 700;
+    color: #38bdf8;
+    font-size: 12px;
+  }
+  .pcb-sel-meta {
+    font-size: 10.5px;
+    color: #94a3b8;
+  }
+
+  .pcb-empty-hint {
+    font-size: 10.5px;
+    color: #64748b;
+    font-style: italic;
+    text-align: center;
+    padding: 8px 4px;
+  }
+
+  .pcb-stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+  }
+  .pcb-stat-val {
+    color: #ffffff;
+    font-weight: 700;
+    font-family: monospace;
+  }
+
+  .pcb-card-action {
+    margin-top: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  /* ── Export Modal ── */
+  .pcb-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+  }
+  .pcb-modal-box {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 14px;
+    width: 100%;
+    max-width: 480px;
+    padding: 20px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    animation: pcb-pop 0.15s ease-out;
+  }
+  @keyframes pcb-pop {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .pcb-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .pcb-modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pcb-modal-icon {
+    font-size: 20px;
+  }
+  .pcb-modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+  }
+  .pcb-modal-desc {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .pcb-modal-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .pcb-modal-close:hover {
+    color: #ffffff;
+  }
+
+  .pcb-alert-success {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #34d399;
+    font-size: 11.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pcb-export-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .pcb-export-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 9px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: border-color 0.12s;
+  }
+  .pcb-export-card:hover {
+    border-color: #38bdf8;
+  }
+
+  .pcb-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pcb-card-label {
+    font-weight: 700;
+    font-size: 12px;
+    color: #ffffff;
+  }
+  .pcb-card-tag {
+    font-size: 9.5px;
+    font-family: monospace;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .pcb-tag-green {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .pcb-tag-blue {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+  }
+  .pcb-tag-amber {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .pcb-card-text {
+    font-size: 10.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+  .pcb-export-btn-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ── Responsive Styling ── */
+  @media (max-width: 1023px) {
+    .pcb-inspector {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      box-shadow: -6px 0 24px rgba(0, 0, 0, 0.7);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .pcb-ribbon {
+      padding: 0 8px;
+      gap: 6px;
+    }
+    .pcb-btn-text, .pcb-title-text, .pcb-engine-badge, .pcb-select-label {
+      display: none;
+    }
+    .pcb-hud-top-right {
+      display: none;
+    }
+  }
+</style>
