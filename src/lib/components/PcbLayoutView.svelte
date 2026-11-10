@@ -563,7 +563,7 @@
           title="Top Copper Layer (F.Cu - Merah)"
         >
           <span class="pcb-layer-dot pcb-dot-top"></span>
-          <span>Top (F.Cu)</span>
+          <span>Top</span>
         </button>
 
         <button
@@ -573,7 +573,7 @@
           title="Bottom Copper Layer (B.Cu - Biru)"
         >
           <span class="pcb-layer-dot pcb-dot-bottom"></span>
-          <span>Bottom (B.Cu)</span>
+          <span>Bottom</span>
         </button>
       </div>
 
@@ -581,10 +581,10 @@
       <div class="pcb-select-wrap" title="Ketebalan Jalur Tembaga">
         <span class="pcb-select-label">Lebar:</span>
         <select bind:value={activeTraceWidth} class="pcb-select">
-          <option value={0.25}>0.25 mm (Sinyal)</option>
-          <option value={0.40}>0.40 mm (Standar)</option>
-          <option value={0.80}>0.80 mm (Daya)</option>
-          <option value={1.20}>1.20 mm (GND)</option>
+          <option value={0.25}>0.25 mm</option>
+          <option value={0.40}>0.40 mm</option>
+          <option value={0.80}>0.80 mm</option>
+          <option value={1.20}>1.20 mm</option>
         </select>
       </div>
 
@@ -639,7 +639,7 @@
       <!-- Export Button -->
       <button on:click={() => showExportModal = true} class="pcb-btn pcb-btn-export" title="Ekspor Gerber, EasyEDA JSON, dan Masker Cetak">
         <span>📦</span>
-        <span class="pcb-btn-text">Ekspor Fabrikasi</span>
+        <span class="pcb-btn-text">Ekspor</span>
       </button>
     </div>
   </header>
@@ -2086,6 +2086,32 @@
   }
 
   /* ── Responsive Styling ── */
+  @media (max-width: 1440px) {
+    .pcb-ribbon {
+      padding: 0 8px;
+      gap: 5px;
+    }
+    .pcb-ribbon-center {
+      gap: 4px;
+    }
+    .pcb-ribbon-right {
+      gap: 4px;
+    }
+    .pcb-tool-lbl {
+      display: none;
+    }
+    .pcb-title-text {
+      display: none;
+    }
+    .pcb-select-label {
+      display: none;
+    }
+    .pcb-btn {
+      padding: 4px 8px;
+      font-size: 11.5px;
+    }
+  }
+
   @media (max-width: 1023px) {
     .pcb-inspector {
       position: absolute;

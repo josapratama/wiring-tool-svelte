@@ -674,7 +674,7 @@
           on:click={toggleRenderMode}
           title="Ubah tampilan komponen fisik realistis Wokwi atau simbol skematik"
         >
-          <span>{$renderMode === 'realistic' ? '🎨 Wokwi Fisik' : '📐 Simbol'}</span>
+          <span>{$renderMode === 'realistic' ? '🎨 Fisik' : '📐 Simbol'}</span>
         </button>
       {/if}
 
@@ -915,7 +915,7 @@
 
         <!-- Simulator Lab button -->
         <button class="btn btn-sim" on:click={openSimulatorLab} title="Buka Virtual MCU & Circuit Simulator Lab">
-          ⚡ <span class="btn-text">Simulator</span>
+          ⚡ <span class="btn-text">Sim</span>
         </button>
 
         <!-- Virtual Serial Monitor button -->
@@ -927,11 +927,6 @@
         <button class="btn btn-erc" on:click={triggerPcbInspector} title="Buka DRC & Pengecekan Desain PCB">
           🛡️ <span class="btn-text">DRC</span>
           <span class="badge-erc badge-erc-ok">✓ CAD</span>
-        </button>
-
-        <!-- 3D PCB View button -->
-        <button class="btn btn-3d" on:click={() => is3dViewerOpen.set(true)} title="Buka Studio 3D PCB Visualizer WebGL">
-          🪐 <span class="btn-text">3D View</span>
         </button>
       {/if}
 
@@ -1293,22 +1288,21 @@
   .app{ display:flex; flex-direction:column; height:100vh; overflow:hidden; background:#0b0f19; }
 
   /* ── EasyEDA CAD Header & Ribbon ── */
-  .cad-header{ height:48px; background:#0f172a; border-bottom:1px solid #1e293b;
-    display:flex; align-items:center; padding:0 12px; gap:8px;
-    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:40; justify-content:space-between;
-    overflow-x:auto; overflow-y:visible; }
-  .cad-header::-webkit-scrollbar { display:none; }
-  .cad-ribbon-left{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .cad-header{ height:46px; background:#0f172a; border-bottom:1px solid #1e293b;
+    display:flex; align-items:center; padding:0 10px; gap:6px;
+    flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,0.4); z-index:500; justify-content:space-between;
+    position:relative; overflow:visible !important; }
+  .cad-ribbon-left{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
   .proj-name-wrap{ display:inline-flex; align-items:center; background:rgba(15,23,42,0.7);
-    border:1px solid #1e293b; border-radius:6px; padding:2px 8px; max-width:160px; min-width:80px; }
+    border:1px solid #1e293b; border-radius:6px; padding:2px 7px; max-width:130px; min-width:70px; }
   .proj-name{ font-size:12px; font-weight:600; color:#e2e8f0; outline:none; cursor:text;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .proj-name:hover{ color:#38bdf8; }
   .proj-name:focus{ background:#1e293b; border-radius:4px; color:#ffffff; }
-  .cad-ribbon-right{ display:flex; align-items:center; gap:6px; justify-content:flex-end; flex-shrink:0; }
-  .cad-ribbon-right .btn { padding:4px 9px; font-size:12px; }
+  .cad-ribbon-right{ display:flex; align-items:center; gap:5px; justify-content:flex-end; flex-shrink:0; }
+  .cad-ribbon-right .btn { padding:4px 8px; font-size:11.5px; }
 
-  .cad-tag{ background:#0284c7; color:#fff; font-size:9px; font-weight:800; padding:2px 6px;
+  .cad-tag{ background:#0284c7; color:#fff; font-size:9px; font-weight:800; padding:2px 5px;
     border-radius:3px; font-family:monospace; letter-spacing:0.5px; }
 
   /* ── CAD Mode Switcher & Realistic Toggle ── */
@@ -1320,18 +1314,18 @@
     border-radius: 7px;
     padding: 2px;
     gap: 2px;
-    margin-left: 6px;
+    margin-left: 4px;
   }
   .cad-mode-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
+    gap: 4px;
+    padding: 3px 8px;
     border-radius: 5px;
     border: 1px solid transparent;
     background: transparent;
     color: #94a3b8;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.12s;
@@ -1355,16 +1349,16 @@
   .cad-render-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 9px;
+    gap: 4px;
+    padding: 3px 8px;
     border-radius: 6px;
     border: 1px solid #334155;
     background: #1e293b;
     color: #cbd5e1;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
-    margin-left: 4px;
+    margin-left: 2px;
     transition: all 0.12s;
     white-space: nowrap;
   }
@@ -1379,15 +1373,15 @@
     box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
   }
 
-  .ribbon-menus{ display:flex; align-items:center; gap:2px; margin-left:6px; }
+  .ribbon-menus{ display:flex; align-items:center; gap:1px; margin-left:4px; }
   .menu-item-wrap{ position:relative; }
   .menu-tab-btn{ background:transparent; border:1px solid transparent; border-radius:4px;
-    color:#cbd5e1; font-size:11.5px; font-weight:600; padding:5px 8px; cursor:pointer; transition:all .12s; }
+    color:#cbd5e1; font-size:11px; font-weight:600; padding:4px 6px; cursor:pointer; transition:all .12s; }
   .menu-tab-btn:hover, .menu-tab-btn.menu-open{ background:#1e293b; color:#38bdf8; border-color:#334155; }
 
   .ribbon-dropdown{ position:absolute; top:calc(100% + 4px); left:0; width:230px;
     background:#0f172a; border:1px solid #334155; border-radius:7px;
-    box-shadow:0 12px 32px rgba(0,0,0,0.7); padding:5px; z-index:1000;
+    box-shadow:0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.06); padding:5px; z-index:99999 !important;
     display:flex; flex-direction:column; gap:2px; animation:pop-down .12s ease-out; }
   .rdd-item{ display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:4px;
     border:none; background:transparent; color:#f1f5f9; font-size:11.5px; text-align:left; cursor:pointer;
@@ -1449,7 +1443,7 @@
   .arrow-down{ font-size:9px; opacity:0.8; }
   .export-dropdown{ position:absolute; right:0; top:calc(100% + 6px);
     width:250px; background:#0f172a; border:1px solid #334155; border-radius:8px;
-    box-shadow:0 12px 32px rgba(0,0,0,0.6); padding:6px; z-index:100;
+    box-shadow:0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.06); padding:6px; z-index:99999 !important;
     display:flex; flex-direction:column; gap:2px; animation:pop-down .12s ease-out; }
   @keyframes pop-down{ from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
   .dd-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
@@ -1478,7 +1472,7 @@
   /* ── Toolbar ── */
   .toolbar{ height:44px; background:#0f172a; border-bottom:1px solid #1e293b;
     display:flex; align-items:center; padding:0 8px; gap:4px;
-    flex-shrink:0; overflow-x:auto; }
+    flex-shrink:0; position:relative; z-index:400; overflow:visible; }
   .toolbar::-webkit-scrollbar{ display:none; }
   .tg{ display:flex; align-items:center; gap:3px; padding:0 6px;
     border-right:1px solid #1e293b; flex-shrink:0; }
@@ -1505,7 +1499,7 @@
 
   .color-popover{ position:absolute; top:calc(100% + 6px); left:0; width:240px;
     background:#0f172a; border:1px solid #334155; border-radius:8px;
-    box-shadow:0 12px 32px rgba(0,0,0,0.6); padding:10px; z-index:100;
+    box-shadow:0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.06); padding:10px; z-index:99999 !important;
     display:flex; flex-direction:column; gap:6px; animation:pop-down .12s ease-out; }
   .color-popover-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#64748b; }
   .color-grid{ display:grid; grid-template-columns:1fr 1fr; gap:5px; }
@@ -1655,10 +1649,15 @@
     @keyframes slide-left { from{transform:translateX(100%)} to{transform:translateX(0)} }
   }
 
-  @media (max-width: 1280px) {
+  @media (max-width: 1440px) {
     .btn-text { display: none; }
     .shortcut-tag { display: none; }
-    .proj-name-wrap { max-width: 110px; }
+    .proj-name-wrap { max-width: 95px; }
+    .nav-toggle-lbl { display: none; }
+    .cad-action-strip .tbtn-txt { display: none; }
+    .cad-action-strip .col-lbl-name { display: none; }
+    .cad-action-strip .tbtn { padding: 4px 6px; }
+    .cad-action-strip .tg { padding: 0 4px; gap: 2px; }
   }
 
   @media (max-width: 768px) {
