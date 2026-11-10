@@ -287,7 +287,10 @@
   }
 
   // ── Ribbon Menus & Export Handlers ─────────────────────────────────────────
-  function handleMenuAction(action) {
+  function handleMenuAction(actionEvent) {
+    const action = typeof actionEvent === 'object' && actionEvent !== null ? (actionEvent.name || actionEvent.id || actionEvent) : actionEvent
+    const payload = typeof actionEvent === 'object' && actionEvent !== null ? actionEvent.payload : null
+
     switch (action) {
       case 'new':
       case 'new-diagram': handleClearDiagram(); break
@@ -298,30 +301,32 @@
       case 'open-snapshots': showSnapshotModal = true; break
       case 'export-doc-pack': handleExportDocPack(); break
       case 'open-custom-comp': showCustomCompModal = true; break
-      case 'open-bom': exportBOM(); break
-      case 'open-wokwi-modal': showWokwiModal = true; break
+      case 'open-bom':
+      case 'export-bom': exportBOM(); break
+      case 'open-wokwi-modal':
+      case 'wokwi': showWokwiModal = true; break
       case 'export-json': exportJSON(); break
       case 'export-svg': exportSVG(); break
       case 'export-png': exportPNG(); break
       case 'export-csv':
       case 'export-netlist': exportNetlist(); break
-      case 'export-bom': exportBOM(); break
       case 'clear-diagram': handleClearDiagram(); break
-      case 'wokwi': showWokwiModal = true; break
       case 'print': printDiagram(); break
+      case 'share':
       case 'share-link': shareDiagramLink(); break
       case 'undo': undo(); break
       case 'redo': redo(); break
       case 'select-all': selectAll(); break
       case 'delete': doDelete(); break
-      case 'rotate': doRotate(90); break
+      case 'rotate': doRotate(payload || 90); break
       case 'flip-x': doFlipX(); break
       case 'flip-y': doFlipY(); break
-      case 'place-wire': setTool('wire'); break
+      case 'place-wire':
+      case 'tool-wire': setTool('wire'); break
       case 'place-label':
       case 'tool-label': setTool('label'); break
       case 'place-gnd': placeGND(); break
-      case 'place-vcc': placeVCC('vcc-flag'); break
+      case 'place-vcc': placeVCC(payload || 'vcc-flag'); break
       case 'place-quick':
       case 'open-quick-palette': showQuickPalette = true; break
       case 'fit-view': canvasRef.fitView?.(); break
@@ -335,13 +340,20 @@
       case 'toggle-right-sidebar': toggleRightSidebar(); break
       case 'open-erc':
       case 'run-erc': showERCModal = true; break
+      case 'open-codegen':
       case 'run-codegen': showCodeGenModal = true; break
+      case 'open-simulator':
       case 'run-simulator': openSimulatorLab(); break
-      case 'open-3d': is3dViewerOpen.set(true); break
-      case 'open-serial': isSerialMonitorOpen.set(true); break
-      case 'pcb-inspector': triggerPcbInspector(); break
-      case 'shortcuts': showShortcuts = true; break
-      case 'circuit-stats': showStats = true; break
+      case 'open-3d':
+      case 'open-3d-view': is3dViewerOpen.set(true); break
+      case 'open-serial':
+      case 'open-serial-monitor': isSerialMonitorOpen.set(true); break
+      case 'pcb-inspector':
+      case 'open-pcb-inspector': triggerPcbInspector(); break
+      case 'shortcuts':
+      case 'open-help': showShortcuts = true; break
+      case 'circuit-stats':
+      case 'open-stats': showStats = true; break
       case 'about':
         showAlert({
           title: 'EasyEDA Web Schematic',
@@ -354,11 +366,13 @@
 
   function handleExportAction(type) {
     switch (type) {
+      case 'pcb-export':
       case 'gerber-zip': triggerPcbExport(); break
       case 'json': exportJSON(); break
       case 'svg': exportSVG(); break
       case 'png': exportPNG(); break
-      case 'csv': exportNetlist(); break
+      case 'csv':
+      case 'netlist': exportNetlist(); break
       case 'bom': exportBOM(); break
       case 'doc-pack': handleExportDocPack(); break
       case 'wokwi': showWokwiModal = true; break

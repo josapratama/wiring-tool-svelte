@@ -131,10 +131,12 @@
     const rawWires = $wiresStore
     const existingMap = new Map(pcbComponents.map(c => [c.instanceId, c]))
     
-    let defaultCol = 15
-    let defaultRow = 15
+    let curX = 6
+    let curY = 6
+    let rowMaxH = 0
+    const margin = 3
 
-    pcbComponents = rawComps.map((sc, idx) => {
+    pcbComponents = rawComps.map((sc) => {
       const existing = existingMap.get(sc.instanceId)
       const fp = getFootprintForComponent(sc)
 
@@ -148,20 +150,25 @@
         }
       }
 
-      // Auto-arrange newly added components in an orderly grid
+      const w = fp.widthMm || 20
+      const h = fp.heightMm || 20
+
+      if (curX + w + margin > boardWidthMm - margin && curX > 6) {
+        curX = 6
+        curY += rowMaxH + 6
+        rowMaxH = 0
+      }
+
       const compObj = {
         ...sc,
-        xMm: defaultCol,
-        yMm: defaultRow,
+        xMm: Number((curX + w / 2).toFixed(2)),
+        yMm: Number((curY + h / 2).toFixed(2)),
         rotation: 0,
         footprint: fp
       }
 
-      defaultCol += (fp.widthMm || 20) + 12
-      if (defaultCol > boardWidthMm - 20) {
-        defaultCol = 15
-        defaultRow += 28
-      }
+      curX += w + 6
+      if (h > rowMaxH) rowMaxH = h
 
       return compObj
     })
@@ -236,16 +243,62 @@
     isPanning = false
   }
 
-  function resetView() {
-    zoom = 2.5
-    panX = 140
-    panY = 70
-  }
+  let canvasAreaEl
 
   function fitToBoard() {
-    zoom = 3.0
-    panX = 100
-    panY = 50
+    if (canvasAreaEl) {
+      const rect = canvasAreaEl.getBoundingClientRect()
+      const w = rect.width || 800
+      const h = rect.height || 600
+      const padding = 50
+      const fitZoom = Math.max(1.0, Math.min(5.5, Math.min((w - padding * 2) / boardWidthMm, (h - padding * 2) / boardHeightMm)))
+      zoom = Number(fitZoom.toFixed(2))
+      panX = Math.round((w - boardWidthMm * zoom) / 2)
+      panY = Math.round((h - boardHeightMm * zoom) / 2)
+    } else {
+      zoom = 2.8
+      panX = 120
+      panY = 60
+    }
+  }
+
+  function resetView() {
+    fitToBoard()
+  }
+
+  function autoArrangeComponents() {
+    pushHistory()
+    let curX = 6
+    let curY = 6
+    let rowMaxH = 0
+    const margin = 3
+
+    pcbComponents.forEach((comp) => {
+      const fp = comp.footprint || getFootprintForComponent(comp)
+      const isRotated90 = (comp.rotation || 0) % 180 !== 0
+      const w = isRotated90 ? (fp.heightMm || 20) : (fp.widthMm || 20)
+      const h = isRotated90 ? (fp.widthMm || 20) : (fp.heightMm || 20)
+
+      if (curX + w + margin > boardWidthMm - margin && curX > 6) {
+        curX = 6
+        curY += rowMaxH + 6
+        rowMaxH = 0
+      }
+
+      comp.xMm = Number((curX + w / 2).toFixed(2))
+      comp.yMm = Number((curY + h / 2).toFixed(2))
+
+      curX += w + 6
+      if (h > rowMaxH) rowMaxH = h
+    })
+
+    if (curY + rowMaxH + margin > boardHeightMm) {
+      boardHeightMm = Math.ceil((curY + rowMaxH + margin + 10) / 10) * 10
+    }
+
+    pcbComponents = [...pcbComponents]
+    updateRatsnest()
+    fitToBoard()
   }
 
   // ── Footprint Dragging ──────────────────────────────────────────────────────
@@ -279,9 +332,17 @@
       const newX = snapToPcbGrid(mouseXmm - dragOffsetMm.x, gridStepMm)
       const newY = snapToPcbGrid(mouseYmm - dragOffsetMm.y, gridStepMm)
 
-      // Keep within board outline
-      draggingComp.xMm = Math.max(5, Math.min(boardWidthMm - 5, newX))
-      draggingComp.yMm = Math.max(5, Math.min(boardHeightMm - 5, newY))
+      const fp = draggingComp.footprint || getFootprintForComponent(draggingComp)
+      const isRotated90 = (draggingComp.rotation || 0) % 180 !== 0
+      const boundW = isRotated90 ? (fp.heightMm || 20) : (fp.widthMm || 20)
+      const boundH = isRotated90 ? (fp.widthMm || 20) : (fp.heightMm || 20)
+      const halfW = boundW / 2
+      const halfH = boundH / 2
+      const margin = 2
+
+      // Keep strictly within physical board outline
+      draggingComp.xMm = Math.max(halfW + margin, Math.min(boardWidthMm - halfW - margin, newX))
+      draggingComp.yMm = Math.max(halfH + margin, Math.min(boardHeightMm - halfH - margin, newY))
       
       pcbComponents = [...pcbComponents]
       updateRatsnest()
@@ -565,6 +626,7 @@
     <!-- Interactive SVG PCB Canvas Container -->
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div
+      bind:this={canvasAreaEl}
       class="pcb-canvas-area"
       on:wheel={handleWheel}
       on:mousedown={startPan}
@@ -954,6 +1016,7 @@
         on:clear-all-traces={clearAllTraces}
         on:rip-up-net={e => handleRipUpNet(e.detail)}
         on:toggle-teardrops={e => enableTeardrops = e.detail}
+        on:auto-arrange={autoArrangeComponents}
         on:highlight-drc={e => highlightDrcIssue(e.detail)}
         on:open-export={() => showExportModal = true}
       />

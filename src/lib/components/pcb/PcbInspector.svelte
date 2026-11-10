@@ -84,6 +84,11 @@
           💧 Teardrop Fillets (Penguat Pad & Via)
         </span>
       </label>
+
+      <button on:click={() => dispatch('auto-arrange')} class="pcb-btn pcb-btn-full" style="margin-top: 10px;" title="Atur dan tata ulang semua footprint komponen agar berada rapi di dalam batas papan PCB">
+        <span>📐</span>
+        <span>Tata Otomatis Footprint di Papan</span>
+      </button>
     </div>
 
     <!-- Section 2: Selected Component -->
