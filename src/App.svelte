@@ -1,5 +1,6 @@
 <script>
   import Canvas          from '$lib/components/Canvas.svelte'
+  import PcbLayoutView   from '$lib/components/PcbLayoutView.svelte'
   import Sidebar         from '$lib/components/Sidebar.svelte'
   import PropertiesPanel from '$lib/components/PropertiesPanel.svelte'
   import ERCModal        from '$lib/components/ERCModal.svelte'
@@ -20,7 +21,8 @@
     edaGridType, showDrawingSheet, showPowerFlow, sheetConfig, updateSheetConfig,
     removeComponent, removeComponents,
     removeWire, removeLabel,
-    getAutoSave, clearAutoSave, initAutoSave
+    getAutoSave, clearAutoSave, initAutoSave,
+    renderMode, toggleRenderMode, activeEditorView, setActiveEditorView
   } from '$lib/store/diagram.js'
   import { findCompDef } from '$lib/data/components-db.js'
   import { runERC }      from '$lib/engine/erc.js'
@@ -607,7 +609,26 @@
         </svg>
         <span class="logo-text">EasyEDA</span>
       </div>
-      <span class="cad-tag">SCH</span>
+      <span class="cad-tag">{$activeEditorView === 'pcb' ? 'PCB' : 'SCH'}</span>
+
+      <!-- Mode Switcher: Schematic & Wiring vs PCB Layout -->
+      <div class="mode-switcher-wrap flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700 ml-2">
+        <button class="px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 {$activeEditorView === 'wiring' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
+          on:click={() => setActiveEditorView('wiring')}>
+          <span>🔌 Skematik</span>
+        </button>
+        <button class="px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 {$activeEditorView === 'pcb' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}"
+          on:click={() => setActiveEditorView('pcb')}>
+          <span>🟩 PCB Layout</span>
+        </button>
+      </div>
+
+      {#if $activeEditorView === 'wiring'}
+        <button class="px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition ml-1 {$renderMode === 'realistic' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800 text-slate-300 border-slate-700'}"
+          on:click={toggleRenderMode} title="Ubah tampilan komponen fisik realistis Wokwi atau simbol skematik">
+          <span>{$renderMode === 'realistic' ? '🎨 Wokwi Fisik' : '📐 Simbol'}</span>
+        </button>
+      {/if}
 
       <!-- Ribbon Menus -->
       <nav class="ribbon-menus">
@@ -1072,8 +1093,12 @@
         </div>
       </div>
 
-      <!-- CANVAS -->
-      <Canvas bind:api={canvasRef} {isLightMode} {projectName}/>
+      <!-- CANVAS OR PCB STUDIO -->
+      {#if $activeEditorView === 'pcb'}
+        <PcbLayoutView />
+      {:else}
+        <Canvas bind:api={canvasRef} {isLightMode} {projectName}/>
+      {/if}
     </div>
 
     <!-- RIGHT SIDEBAR (PROPERTIES & TEMPLATES) ──────── -->

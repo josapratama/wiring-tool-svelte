@@ -9,7 +9,7 @@
   import { pinColor }         from '$lib/data/pin-colors.js'
   import { TITLE_H, PIN_R, mcuPinSpacing } from '$lib/engine/geometry.js'
   import { activeTool, selection, pushHistory,
-           updateComponent, removeComponent } from '$lib/store/diagram.js'
+           updateComponent, removeComponent, renderMode } from '$lib/store/diagram.js'
 
   export let comp
   export let selected  = false
@@ -313,24 +313,68 @@
     {/if}
 
     <!-- Body -->
-    <rect class="comp-body" width={comp.width} height={comp.height} rx="6" ry="6"
-      fill={theme.body} stroke={strokeColor} stroke-width={strokeWidth}/>
+    {#if $renderMode === 'realistic' && comp.wokwiTag}
+      <rect class="comp-body" width={comp.width} height={comp.height} rx="8" ry="8"
+        fill="#0b1320" stroke={strokeColor} stroke-width={strokeWidth} opacity="0.95"/>
+      <foreignObject x="0" y="0" width={comp.width} height={comp.height} class="overflow-visible pointer-events-none">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="w-full h-full flex flex-col items-center justify-center pointer-events-none select-none p-1">
+          {#if comp.wokwiTag === 'wokwi-esp32-devkit-v1'}
+            <wokwi-esp32-devkit-v1 style="transform: scale(0.92); transform-origin: center center;"></wokwi-esp32-devkit-v1>
+          {:else if comp.wokwiTag === 'wokwi-arduino-uno'}
+            <wokwi-arduino-uno style="transform: scale(0.85); transform-origin: center center;"></wokwi-arduino-uno>
+          {:else if comp.wokwiTag === 'wokwi-arduino-nano'}
+            <wokwi-arduino-nano style="transform: scale(0.92); transform-origin: center center;"></wokwi-arduino-nano>
+          {:else if comp.wokwiTag === 'wokwi-arduino-mega'}
+            <wokwi-arduino-mega style="transform: scale(0.72); transform-origin: center center;"></wokwi-arduino-mega>
+          {:else if comp.wokwiTag === 'wokwi-pi-pico'}
+            <wokwi-pi-pico style="transform: scale(0.92); transform-origin: center center;"></wokwi-pi-pico>
+          {:else if comp.wokwiTag === 'wokwi-resistor'}
+            <wokwi-resistor value="10000" style="transform: scale(1.1); transform-origin: center;"></wokwi-resistor>
+          {:else if comp.wokwiTag === 'wokwi-led'}
+            <wokwi-led color="red" value="1" style="transform: scale(1.2); transform-origin: center;"></wokwi-led>
+          {:else if comp.wokwiTag === 'wokwi-pushbutton'}
+            <wokwi-pushbutton color="red"></wokwi-pushbutton>
+          {:else if comp.wokwiTag === 'wokwi-potentiometer'}
+            <wokwi-potentiometer></wokwi-potentiometer>
+          {:else if comp.wokwiTag === 'wokwi-servo'}
+            <wokwi-servo></wokwi-servo>
+          {:else if comp.wokwiTag === 'wokwi-ssd1306'}
+            <wokwi-ssd1306></wokwi-ssd1306>
+          {:else if comp.wokwiTag === 'wokwi-lcd1602'}
+            <wokwi-lcd1602></wokwi-lcd1602>
+          {:else if comp.wokwiTag === 'wokwi-hc-sr04'}
+            <wokwi-hc-sr04></wokwi-hc-sr04>
+          {:else if comp.wokwiTag === 'wokwi-dht22'}
+            <wokwi-dht22></wokwi-dht22>
+          {:else if comp.wokwiTag === 'wokwi-buzzer'}
+            <wokwi-buzzer></wokwi-buzzer>
+          {/if}
+        </div>
+      </foreignObject>
+      <!-- Discrete small badge label -->
+      <text x={comp.width/2} y={12} class="comp-label" fill="#facc15" font-size="10" font-weight="bold"
+        dominant-baseline="central" text-anchor="middle">{comp.label}</text>
+    {:else}
+      <!-- Standard Schematic Block Body -->
+      <rect class="comp-body" width={comp.width} height={comp.height} rx="6" ry="6"
+        fill={theme.body} stroke={strokeColor} stroke-width={strokeWidth}/>
 
-    <!-- Title bar -->
-    <rect x="1" y="1" width={comp.width - 2} height={TITLE_H - 4}
-      rx="5" ry="5" fill={theme.title}/>
+      <!-- Title bar -->
+      <rect x="1" y="1" width={comp.width - 2} height={TITLE_H - 4}
+        rx="5" ry="5" fill={theme.title}/>
 
-    <!-- Label -->
-    <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={theme.text}
-      dominant-baseline="central" text-anchor="middle">{comp.label}</text>
+      <!-- Label -->
+      <text x={comp.width/2} y={TITLE_H/2 + 1} class="comp-label" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={theme.text}
+        dominant-baseline="central" text-anchor="middle">{comp.label}</text>
 
-    <!-- Sub-label -->
-    <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={theme.subtext}
-      text-anchor="middle">{comp.id}</text>
+      <!-- Sub-label -->
+      <text x={comp.width/2} y={TITLE_H - 6} class="comp-sublabel" class:flip-h={comp.flipX} class:flip-v={comp.flipY} fill={theme.subtext}
+        text-anchor="middle">{comp.id}</text>
 
-    <!-- Divider -->
-    <line x1="1" y1={TITLE_H} x2={comp.width - 1} y2={TITLE_H}
-      stroke={theme.border} stroke-width="1" opacity="0.4"/>
+      <!-- Divider -->
+      <line x1="1" y1={TITLE_H} x2={comp.width - 1} y2={TITLE_H}
+        stroke={theme.border} stroke-width="1" opacity="0.4"/>
+    {/if}
 
   <!-- MCU pins -->
   {#if mcuData}

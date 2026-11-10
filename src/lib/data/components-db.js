@@ -13,6 +13,9 @@ export const CATEGORIES = [
         width: 220,
         height: 0,
         desc: "ESP32 DevKit V1 (38-pin)",
+        wokwiTag: "wokwi-esp32-devkit-v1",
+        footprintId: "ESP32-DEVKIT-V1",
+        footprintDesc: "MODULE-38P-2.54MM",
       },
       {
         id: "esp32s3-devkit",
@@ -22,6 +25,9 @@ export const CATEGORIES = [
         width: 220,
         height: 0,
         desc: "ESP32-S3 DevKitC-1 N16R8",
+        wokwiTag: "wokwi-esp32-devkit-v1",
+        footprintId: "ESP32-DEVKIT-V1",
+        footprintDesc: "MODULE-38P-2.54MM",
       },
       {
         id: "arduino-uno",
@@ -31,6 +37,9 @@ export const CATEGORIES = [
         width: 220,
         height: 0,
         desc: "Arduino Uno R3 (ATmega328P)",
+        wokwiTag: "wokwi-arduino-uno",
+        footprintId: "ARDUINO-UNO",
+        footprintDesc: "ARDUINO-UNO-R3",
       },
       {
         id: "arduino-nano",
@@ -40,6 +49,9 @@ export const CATEGORIES = [
         width: 200,
         height: 0,
         desc: "Arduino Nano (ATmega328P)",
+        wokwiTag: "wokwi-arduino-nano",
+        footprintId: "ARDUINO-NANO",
+        footprintDesc: "DIP-30-W600",
       },
       {
         id: "arduino-mega",
@@ -49,6 +61,9 @@ export const CATEGORIES = [
         width: 220,
         height: 0,
         desc: "Arduino Mega 2560",
+        wokwiTag: "wokwi-arduino-mega",
+        footprintId: "ARDUINO-MEGA",
+        footprintDesc: "ARDUINO-MEGA-2560",
       },
       {
         id: "rpi4",
@@ -58,6 +73,9 @@ export const CATEGORIES = [
         width: 230,
         height: 0,
         desc: "RPi 4B (40-pin GPIO)",
+        wokwiTag: "wokwi-pi-pico",
+        footprintId: "RPI-4B-HEADER",
+        footprintDesc: "HDR-2X20-2.54MM",
       },
       {
         id: "rpi-pico",
@@ -67,6 +85,9 @@ export const CATEGORIES = [
         width: 200,
         height: 0,
         desc: "RPi Pico (RP2040)",
+        wokwiTag: "wokwi-pi-pico",
+        footprintId: "RPI-PICO",
+        footprintDesc: "MODULE-40P-2.54MM",
       },
     ],
   },
@@ -82,6 +103,9 @@ export const CATEGORIES = [
         width: 140,
         height: 120,
         desc: "SSD1306 I2C OLED",
+        wokwiTag: "wokwi-ssd1306",
+        footprintId: "OLED-128X64",
+        footprintDesc: "DISPLAY-OLED-0.96-I2C",
         pins: [
           { id: "VCC", label: "VCC", side: "right", pos: 0.25, type: "power" },
           { id: "GND", label: "GND", side: "right", pos: 0.5, type: "gnd" },
@@ -96,6 +120,9 @@ export const CATEGORIES = [
         width: 160,
         height: 110,
         desc: "16x2 LCD HD44780",
+        wokwiTag: "wokwi-lcd1602",
+        footprintId: "HEADER-1X16",
+        footprintDesc: "HDR-1X16-2.54MM",
         pins: [
           { id: "VSS", label: "GND", side: "left", pos: 0.2, type: "gnd" },
           { id: "VDD", label: "5V", side: "left", pos: 0.35, type: "power" },
@@ -172,6 +199,9 @@ export const CATEGORIES = [
         width: 110,
         height: 100,
         desc: "Temp & Humidity Sensor",
+        wokwiTag: "wokwi-dht22",
+        footprintId: "HEADER-1X4",
+        footprintDesc: "TO-92-4P-2.54MM",
         pins: [
           { id: "VCC", label: "VCC", side: "left", pos: 0.2, type: "power" },
           {
@@ -191,6 +221,9 @@ export const CATEGORIES = [
         width: 120,
         height: 100,
         desc: "Ultrasonic Distance Sensor",
+        wokwiTag: "wokwi-hc-sr04",
+        footprintId: "HEADER-1X4",
+        footprintDesc: "HDR-1X4-2.54MM",
         pins: [
           { id: "VCC", label: "VCC", side: "top", pos: 0.2, type: "power" },
           { id: "TRIG", label: "TRIG", side: "top", pos: 0.4, type: "digital" },
@@ -211,6 +244,9 @@ export const CATEGORIES = [
         width: 130,
         height: 140,
         desc: "Temp, Humidity & Pressure (I2C/SPI)",
+        wokwiTag: "wokwi-dht22",
+        footprintId: "HEADER-1X6",
+        footprintDesc: "HDR-1X6-2.54MM",
         pins: [
           { id: "VIN", label: "VIN (3.3V)", side: "left", pos: 0.18, type: "power" },
           { id: "GND", label: "GND", side: "left", pos: 0.35, type: "gnd" },
@@ -227,6 +263,9 @@ export const CATEGORIES = [
         width: 130,
         height: 150,
         desc: "3-Axis Gyro + Accelerometer (I2C)",
+        wokwiTag: "wokwi-dht22",
+        footprintId: "HEADER-1X8",
+        footprintDesc: "HDR-1X8-2.54MM",
         pins: [
           { id: "VCC", label: "VCC (3.3-5V)", side: "left", pos: 0.16, type: "power" },
           { id: "GND", label: "GND", side: "left", pos: 0.32, type: "gnd" },
@@ -245,6 +284,9 @@ export const CATEGORIES = [
         width: 120,
         height: 100,
         desc: "PIR Motion Detection Sensor",
+        wokwiTag: "wokwi-dht22",
+        footprintId: "HEADER-1X3",
+        footprintDesc: "HDR-1X3-2.54MM",
         pins: [
           { id: "VCC", label: "VCC (5V)", side: "left", pos: 0.25, type: "power" },
           { id: "OUT", label: "OUT (3.3V)", side: "right", pos: 0.5, type: "digital" },
@@ -349,6 +391,9 @@ export const CATEGORIES = [
         width: 100,
         height: 70,
         desc: "Resistor",
+        wokwiTag: "wokwi-resistor",
+        footprintId: "RESISTOR-TH",
+        footprintDesc: "AXIAL-0.3-7.62MM",
         props: { value: "10kΩ" },
         pins: [
           { id: "1", label: "1", side: "left", pos: 0.5, type: "passive" },
@@ -362,6 +407,9 @@ export const CATEGORIES = [
         width: 90,
         height: 70,
         desc: "Capacitor",
+        wokwiTag: "wokwi-resistor",
+        footprintId: "CAPACITOR-TH",
+        footprintDesc: "C_RADIAL_D5.0_P2.54",
         props: { value: "100nF" },
         pins: [
           { id: "+", label: "+", side: "left", pos: 0.5, type: "passive" },
@@ -375,6 +423,9 @@ export const CATEGORIES = [
         width: 90,
         height: 70,
         desc: "LED",
+        wokwiTag: "wokwi-led",
+        footprintId: "LED-5MM",
+        footprintDesc: "LED_D5.0MM_P2.54",
         pins: [
           { id: "A", label: "A (+)", side: "left", pos: 0.5, type: "power" },
           { id: "K", label: "K (−)", side: "right", pos: 0.5, type: "gnd" },
@@ -445,6 +496,9 @@ export const CATEGORIES = [
         width: 90,
         height: 80,
         desc: "Momentary Push Button",
+        wokwiTag: "wokwi-pushbutton",
+        footprintId: "HEADER-1X2",
+        footprintDesc: "TACT-SWITCH-6MM",
         pins: [
           { id: "1", label: "1", side: "left", pos: 0.5, type: "digital" },
           { id: "2", label: "2", side: "right", pos: 0.5, type: "digital" },
@@ -457,6 +511,9 @@ export const CATEGORIES = [
         width: 130,
         height: 120,
         desc: "5V/12V Relay Module",
+        wokwiTag: "wokwi-servo",
+        footprintId: "HEADER-1X6",
+        footprintDesc: "RELAY-5V-MODULE",
         pins: [
           { id: "VCC", label: "VCC", side: "top", pos: 0.25, type: "power" },
           { id: "GND", label: "GND", side: "top", pos: 0.5, type: "gnd" },
@@ -661,6 +718,9 @@ export const CATEGORIES = [
         width: 100,
         height: 90,
         desc: "Piezo Buzzer",
+        wokwiTag: "wokwi-buzzer",
+        footprintId: "HEADER-1X2",
+        footprintDesc: "BUZZER-D12MM",
         pins: [
           {
             id: "+",

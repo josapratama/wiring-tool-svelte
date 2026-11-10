@@ -31,6 +31,47 @@ export const showPowerFlow = writable(false);
 export const highlightedWireIds = writable(new Set());
 export const activeHighlightedNet = writable(null);
 
+// ── Multi-Mode & PCB Studio Extensions ─────────────────────────
+export const renderMode = writable("realistic"); // 'realistic' (Wokwi) | 'schematic' (Symbol Blocks)
+export const activeEditorView = writable("wiring"); // 'wiring' | 'pcb'
+export const pcbBoardConfig = writable({
+  widthMm: 100,
+  heightMm: 80,
+  thicknessMm: 1.6,
+  layerCount: 2,
+  gridStepMm: 2.54
+});
+export const copperTraces = writable([]);
+export const activePcbLayer = writable("top"); // 'top' (F.Cu) | 'bottom' (B.Cu)
+export const activeTraceWidthMm = writable(0.40); // 0.25, 0.40, 0.80, 1.20
+
+export function setRenderMode(mode) {
+  renderMode.set(mode === "schematic" ? "schematic" : "realistic");
+}
+
+export function toggleRenderMode() {
+  renderMode.update(m => m === "realistic" ? "schematic" : "realistic");
+}
+
+export function setActiveEditorView(view) {
+  activeEditorView.set(view === "pcb" ? "pcb" : "wiring");
+}
+
+export function addCopperTrace(trace) {
+  copperTraces.update(traces => [...traces, {
+    id: trace.id || `trace_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    ...trace
+  }]);
+}
+
+export function removeCopperTrace(traceId) {
+  copperTraces.update(traces => traces.filter(t => t.id !== traceId));
+}
+
+export function clearCopperTraces() {
+  copperTraces.set([]);
+}
+
 export const sheetConfig = writable({
   title: "ESP32-S3 FI Diagnostic",
   engineer: "Electronics Eng",
