@@ -18,12 +18,21 @@
   import {
     components as compsStore,
     wires as wiresStore,
-    activeEditorView
+    copperTraces as copperTracesStore,
+    pcbVias as pcbViasStore,
+    activeEditorView,
+    addCopperTrace,
+    removeCopperTrace,
+    clearCopperTraces,
+    addPcbVia,
+    removePcbVia,
+    clearPcbVias,
+    pushHistory
   } from '$lib/store/diagram.js'
 
   import {
     mm2px, px2mm, snapToPcbGrid, snapTo45Degrees,
-    getFootprintForComponent, generateRatsnestLines,
+    getFootprintForComponent, generateRatsnestLines, runPcbDrcCheck,
     generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg
   } from '$lib/engine/pcb-engine.js'
 
@@ -46,10 +55,10 @@
   let activeLayer = 'top' // 'top' (F.Cu - Red) | 'bottom' (B.Cu - Blue)
   let activeTraceWidth = 0.40 // mm (0.25, 0.40, 0.80, 1.20)
 
-  // ── PCB Layout Data ─────────────────────────────────────────────────────────
+  // ── PCB Layout Data (Connected to Global Store) ──────────────────────────────
   let pcbComponents = []
-  let copperTraces = []
-  let vias = []
+  $: copperTraces = $copperTracesStore
+  $: vias = $pcbViasStore
   let selectedCompId = null
   let selectedTraceId = null
 
@@ -115,19 +124,20 @@
     updateRatsnest()
   }
 
-  // Reactive trigger for ratsnest when copper traces change
-  $: if (copperTraces) {
+  // Reactive trigger for ratsnest when copper traces, vias, or board size change
+  $: if (copperTraces || vias || boardWidthMm || boardHeightMm) {
     updateRatsnest()
   }
 
   function updateRatsnest() {
     ratsnestLines = generateRatsnestLines(pcbComponents, $wiresStore, copperTraces)
-    const netCount = new Set(ratsnestLines.map(r => r.netId)).size
-    drcResults = {
-      ok: ratsnestLines.length === 0,
-      unroutedCount: ratsnestLines.length,
-      totalNets: netCount
-    }
+    drcResults = runPcbDrcCheck(
+      { widthMm: boardWidthMm, heightMm: boardHeightMm },
+      pcbComponents,
+      copperTraces,
+      vias,
+      $wiresStore
+    )
   }
 
   // ── Viewport Canvas Pan & Zoom Handlers ─────────────────────────────────────
@@ -199,6 +209,7 @@
   function startDragComp(e, comp) {
     if (activeTool !== 'select') return
     e.stopPropagation()
+    pushHistory()
     selectedCompId = comp.instanceId
     selectedTraceId = null
 
@@ -248,6 +259,7 @@
     }
     const comp = pcbComponents.find(c => c.instanceId === selectedCompId)
     if (comp) {
+      pushHistory()
       comp.rotation = ((comp.rotation || 0) + deg) % 360
       pcbComponents = [...pcbComponents]
       updateRatsnest()
@@ -271,8 +283,7 @@
       } else {
         // Complete the trace segment to this destination pad
         if (routingStart.xMm !== padXmm || routingStart.yMm !== padYmm) {
-          copperTraces.push({
-            id: `trace_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          addCopperTrace({
             layer: activeLayer,
             x1: routingStart.xMm,
             y1: routingStart.yMm,
@@ -280,8 +291,6 @@
             y2: padYmm,
             widthMm: activeTraceWidth
           })
-          copperTraces = [...copperTraces]
-          updateRatsnest()
         }
         routingStart = null
         routingCurrent = null
@@ -301,18 +310,15 @@
       const mmY = snapToPcbGrid(mouseSvgY, gridStepMm)
 
       if (mmX >= 0 && mmX <= boardWidthMm && mmY >= 0 && mmY <= boardHeightMm) {
-        const newVia = {
-          id: `via_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        addPcbVia({
           xMm: mmX,
           yMm: mmY,
           outerMm: 0.8,
           drillMm: 0.45
-        }
-        vias = [...vias, newVia]
+        })
 
         if (routingStart) {
-          copperTraces.push({
-            id: `trace_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          addCopperTrace({
             layer: activeLayer,
             x1: routingStart.xMm,
             y1: routingStart.yMm,
@@ -320,20 +326,17 @@
             y2: mmY,
             widthMm: activeTraceWidth
           })
-          copperTraces = [...copperTraces]
           activeLayer = activeLayer === 'top' ? 'bottom' : 'top'
           routingStart = { xMm: mmX, yMm: mmY }
           routingCurrent = { xMm: mmX, yMm: mmY }
         }
-        updateRatsnest()
       }
       return
     }
 
     if (activeTool === 'route' && routingStart && routingCurrent) {
       // Place an intermediate corner waypoint
-      copperTraces.push({
-        id: `trace_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      addCopperTrace({
         layer: activeLayer,
         x1: routingStart.xMm,
         y1: routingStart.yMm,
@@ -341,9 +344,7 @@
         y2: routingCurrent.yMm,
         widthMm: activeTraceWidth
       })
-      copperTraces = [...copperTraces]
       routingStart = { ...routingCurrent }
-      updateRatsnest()
     } else {
       selectedCompId = null
       selectedTraceId = null
@@ -362,18 +363,16 @@
 
   function deleteSelectedTrace() {
     if (selectedTraceId) {
-      copperTraces = copperTraces.filter(t => t.id !== selectedTraceId)
-      vias = vias.filter(v => v.id !== selectedTraceId)
+      removeCopperTrace(selectedTraceId)
+      removePcbVia(selectedTraceId)
       selectedTraceId = null
-      updateRatsnest()
     }
   }
 
   function clearAllTraces() {
-    if (confirm("Hapus semua jalur tembaga (copper traces) pada PCB ini?")) {
-      copperTraces = []
-      vias = []
-      updateRatsnest()
+    if (confirm("Hapus semua jalur tembaga (copper traces) dan via pada PCB ini?")) {
+      clearCopperTraces()
+      clearPcbVias()
     }
   }
 
@@ -914,21 +913,69 @@
 
         <!-- Section 3: Copper Traces Management -->
         <div class="pcb-card">
-          <h4 class="pcb-card-title">Jalur Tembaga</h4>
+          <h4 class="pcb-card-title">Jalur Tembaga & Via</h4>
           <div class="pcb-stat-row">
-            <span>Total Segmen:</span>
+            <span>Total Segmen Jalur:</span>
             <span class="pcb-stat-val">{copperTraces.length} segmen</span>
+          </div>
+          <div class="pcb-stat-row">
+            <span>Total Through-hole Via:</span>
+            <span class="pcb-stat-val">{vias.length} via</span>
           </div>
           {#if selectedTraceId}
             <button on:click={deleteSelectedTrace} class="pcb-btn pcb-btn-danger pcb-btn-full" style="margin-bottom: 8px;">
               <span>🗑</span>
-              <span>Hapus Jalur Dipilih (Del)</span>
+              <span>Hapus Elemen Terpilih (Del)</span>
             </button>
           {/if}
           <button on:click={clearAllTraces} class="pcb-btn pcb-btn-full">
             <span>🧹</span>
-            <span>Bersihkan Semua Jalur</span>
+            <span>Bersihkan Semua Jalur & Via</span>
           </button>
+        </div>
+
+        <!-- Section 3.5: DRC (Design Rule Check) Real-Time Audit -->
+        <div class="pcb-card">
+          <div class="pcb-drc-header">
+            <h4 class="pcb-card-title">Aturan Desain (DRC CAD)</h4>
+            <span class="pcb-badge" class:pcb-badge-ok={drcResults.ok && drcResults.clean} class:pcb-badge-warn={!drcResults.ok || !drcResults.clean}>
+              {drcResults.ok && drcResults.clean ? '✓ Passed' : `${(drcResults.errors?.length || 0) + (drcResults.warnings?.length || 0)} Isu`}
+            </span>
+          </div>
+          <p class="pcb-card-desc">Audit real-time standar pabrikasi JLCPCB / PCBWay.</p>
+          
+          {#if drcResults.errors && drcResults.errors.length > 0}
+            <div class="pcb-drc-list pcb-drc-errors">
+              {#each drcResults.errors as err}
+                <div class="pcb-drc-item pcb-drc-err">
+                  <span class="pcb-drc-icon">🚫</span>
+                  <div class="pcb-drc-msg">
+                    <strong>{err.code}</strong>: {err.message}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#if drcResults.warnings && drcResults.warnings.length > 0}
+            <div class="pcb-drc-list pcb-drc-warnings">
+              {#each drcResults.warnings as warn}
+                <div class="pcb-drc-item pcb-drc-warn">
+                  <span class="pcb-drc-icon">⚠️</span>
+                  <div class="pcb-drc-msg">
+                    <strong>{warn.code}</strong>: {warn.message}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#if drcResults.clean}
+            <div class="pcb-drc-clean-box">
+              <span class="pcb-clean-icon">🛡️</span>
+              <div>Semua jalur tembaga, via, dan footprint pad memenuhi aturan manufaktur. Siap diekspor!</div>
+            </div>
+          {/if}
         </div>
 
         <!-- Section 4: Export Action -->
@@ -1578,6 +1625,83 @@
     color: #ffffff;
     font-weight: 700;
     font-family: monospace;
+  }
+
+  /* ── DRC Inspector Section ── */
+  .pcb-drc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .pcb-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .pcb-badge-ok {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+  }
+  .pcb-badge-warn {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+  }
+  .pcb-drc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .pcb-drc-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 11px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    line-height: 1.35;
+  }
+  .pcb-drc-err {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
+  .pcb-drc-warn {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fde68a;
+  }
+  .pcb-drc-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .pcb-drc-msg {
+    flex: 1;
+  }
+  .pcb-drc-clean-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #a7f3d0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    margin-top: 8px;
+    line-height: 1.35;
+  }
+  .pcb-clean-icon {
+    font-size: 16px;
+    flex-shrink: 0;
   }
 
   .pcb-card-action {

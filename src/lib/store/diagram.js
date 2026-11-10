@@ -42,6 +42,7 @@ export const pcbBoardConfig = writable({
   gridStepMm: 2.54
 });
 export const copperTraces = writable([]);
+export const pcbVias = writable([]);
 export const activePcbLayer = writable("top"); // 'top' (F.Cu) | 'bottom' (B.Cu)
 export const activeTraceWidthMm = writable(0.40); // 0.25, 0.40, 0.80, 1.20
 
@@ -58,18 +59,45 @@ export function setActiveEditorView(view) {
 }
 
 export function addCopperTrace(trace) {
-  copperTraces.update(traces => [...traces, {
+  pushHistory();
+  const t = {
     id: trace.id || `trace_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     ...trace
-  }]);
+  };
+  copperTraces.update(traces => [...traces, t]);
+  return t;
 }
 
 export function removeCopperTrace(traceId) {
+  pushHistory();
   copperTraces.update(traces => traces.filter(t => t.id !== traceId));
 }
 
 export function clearCopperTraces() {
+  pushHistory();
   copperTraces.set([]);
+}
+
+export function addPcbVia(via) {
+  pushHistory();
+  const v = {
+    id: via.id || `via_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    outerMm: via.outerMm || 0.8,
+    drillMm: via.drillMm || 0.45,
+    ...via
+  };
+  pcbVias.update(vs => [...vs, v]);
+  return v;
+}
+
+export function removePcbVia(viaId) {
+  pushHistory();
+  pcbVias.update(vs => vs.filter(v => v.id !== viaId));
+}
+
+export function clearPcbVias() {
+  pushHistory();
+  pcbVias.set([]);
 }
 
 export const sheetConfig = writable({
@@ -95,6 +123,9 @@ function snapshot() {
     c: get(components).map(strip),
     w: get(wires),
     l: get(labels),
+    t: get(copperTraces),
+    v: get(pcbVias),
+    b: get(pcbBoardConfig),
   });
 }
 
@@ -120,6 +151,9 @@ function restore(snap) {
   components.set((snap.c ?? []).map(attach));
   wires.set(snap.w ?? []);
   labels.set(snap.l ?? []);
+  if (snap.t) copperTraces.set(snap.t);
+  if (snap.v) pcbVias.set(snap.v);
+  if (snap.b) pcbBoardConfig.set(snap.b);
   selection.set(null);
   multiSelection.set([]);
 }
@@ -457,6 +491,9 @@ export function loadDiagram(data) {
   components.set((data.components ?? []).map(attach));
   wires.set(data.wires ?? []);
   labels.set(data.labels ?? []);
+  if (data.copperTraces) copperTraces.set(data.copperTraces);
+  if (data.pcbVias || data.vias) pcbVias.set(data.pcbVias ?? data.vias ?? []);
+  if (data.pcbBoardConfig) pcbBoardConfig.set(data.pcbBoardConfig);
   selection.set(null);
   multiSelection.set([]);
 }
@@ -467,6 +504,9 @@ export function getDiagram() {
     components: get(components).map(strip),
     wires: get(wires),
     labels: get(labels),
+    copperTraces: get(copperTraces),
+    pcbVias: get(pcbVias),
+    pcbBoardConfig: get(pcbBoardConfig),
   };
 }
 
@@ -494,6 +534,9 @@ export function initAutoSave() {
 components.subscribe(scheduleAutoSave);
 wires.subscribe(scheduleAutoSave);
 labels.subscribe(scheduleAutoSave);
+copperTraces.subscribe(scheduleAutoSave);
+pcbVias.subscribe(scheduleAutoSave);
+pcbBoardConfig.subscribe(scheduleAutoSave);
 
 export function getAutoSave() {
   try {

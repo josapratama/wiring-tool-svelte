@@ -653,6 +653,108 @@ export function generateRatsnestLines(pcbComponents = [], wires = [], copperTrac
   return ratsnest;
 }
 
+// ── PCB Design Rule Checker (DRC Engine) ──────────────────────────────────────
+/**
+ * Professional PCB Design Rule Checker (DRC)
+ * 
+ * Audits:
+ * 1. Unrouted Netlist (Air-wires / ratsnest remaining)
+ * 2. Board Boundary Violations (components, traces, or vias outside Edge.Cuts)
+ * 3. Via Annular Ring Minimum Thickness
+ * 4. Trace-to-Trace Clearance Violations (< 0.20mm)
+ */
+export function runPcbDrcCheck(board, pcbComponents = [], copperTraces = [], vias = [], wires = []) {
+  const violations = [];
+  const warnings = [];
+  const w = board.widthMm || 100;
+  const h = board.heightMm || 80;
+  const MIN_CLEARANCE_MM = 0.20;
+
+  // 1. Air-wire / Unrouted Nets
+  const ratsnest = generateRatsnestLines(pcbComponents, wires, copperTraces);
+  if (ratsnest.length > 0) {
+    warnings.push({
+      type: "unrouted_nets",
+      code: "DRC_W01",
+      message: `${ratsnest.length} segmen koneksi belum terhubung jalur tembaga (ratsnest air-wires).`,
+      count: ratsnest.length
+    });
+  }
+
+  // 2. Board Boundary Verification
+  for (const c of pcbComponents) {
+    if (c.xMm < 0 || c.xMm > w || c.yMm < 0 || c.yMm > h) {
+      violations.push({
+        type: "out_of_board",
+        code: "DRC_E01",
+        message: `Komponen ${c.label || c.name || c.id} berada di luar area fisik papan (${c.xMm.toFixed(1)}mm, ${c.yMm.toFixed(1)}mm).`,
+        item: c
+      });
+    }
+  }
+
+  for (const t of copperTraces) {
+    if (t.x1 < 0 || t.x1 > w || t.y1 < 0 || t.y1 > h || t.x2 < 0 || t.x2 > w || t.y2 < 0 || t.y2 > h) {
+      violations.push({
+        type: "trace_out_of_board",
+        code: "DRC_E02",
+        message: `Jalur tembaga ${t.id} melampaui batas tepi papan PCB (Edge.Cuts).`,
+        item: t
+      });
+    }
+  }
+
+  for (const v of vias) {
+    if (v.xMm < 0 || v.xMm > w || v.yMm < 0 || v.yMm > h) {
+      violations.push({
+        type: "via_out_of_board",
+        code: "DRC_E03",
+        message: `Via ${v.id} berada di luar batas fisik papan PCB.`,
+        item: v
+      });
+    }
+    const ringMm = ((v.outerMm || 0.8) - (v.drillMm || 0.45)) / 2;
+    if (ringMm < 0.15) {
+      warnings.push({
+        type: "via_annular_ring",
+        code: "DRC_W02",
+        message: `Cincin tembaga Via (${ringMm.toFixed(2)}mm) terlalu tipis untuk fabrikasi standar (min 0.15mm).`,
+        item: v
+      });
+    }
+  }
+
+  // 3. Track-to-Track Clearance (Same layer, different nets)
+  for (let i = 0; i < copperTraces.length; i++) {
+    const t1 = copperTraces[i];
+    for (let j = i + 1; j < copperTraces.length; j++) {
+      const t2 = copperTraces[j];
+      if (t1.layer !== t2.layer) continue;
+      if (t1.netId && t2.netId && t1.netId !== t2.netId) {
+        const d1 = Math.hypot(t1.x1 - t2.x1, t1.y1 - t2.y1);
+        const d2 = Math.hypot(t1.x2 - t2.x2, t1.y2 - t2.y2);
+        if (d1 < MIN_CLEARANCE_MM || d2 < MIN_CLEARANCE_MM) {
+          violations.push({
+            type: "clearance_short",
+            code: "DRC_E04",
+            message: `Jarak isolasi tembaga antara net ${t1.netId} dan ${t2.netId} (${Math.min(d1, d2).toFixed(2)}mm) di bawah batas aman ${MIN_CLEARANCE_MM}mm.`,
+            t1, t2
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    ok: violations.length === 0,
+    clean: violations.length === 0 && warnings.length === 0,
+    errors: violations,
+    warnings,
+    unroutedCount: ratsnest.length,
+    timestamp: new Date().toISOString()
+  };
+}
+
 // ── Gerber RS-274X Standard Output Generator ──────────────────────────────────
 export function generateGerberRS274X(board, pcbComponents, copperTraces, vias = []) {
   const timestamp = new Date().toISOString();
