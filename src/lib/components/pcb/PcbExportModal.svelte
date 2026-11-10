@@ -74,6 +74,34 @@
             </div>
           </div>
         </div>
+
+        <!-- Option 4: JLCPCB SMT Pick & Place (CPL CSV) -->
+        <div class="pcb-export-option">
+          <div class="pcb-opt-icon">🏭</div>
+          <div class="pcb-opt-content">
+            <h4 class="pcb-opt-title">Pick & Place Centroid (CPL CSV)</h4>
+            <p class="pcb-opt-desc">
+              File koordinat komponen X/Y dan rotasi standar JLCPCB / PCBWay SMT Assembly.
+            </p>
+            <button on:click={() => selectExport('cpl-csv')} class="pcb-btn pcb-opt-btn">
+              <span>Unduh JLCPCB Pick & Place (CPL.csv)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Option 5: 3D Enclosure / Casing STL -->
+        <div class="pcb-export-option">
+          <div class="pcb-opt-icon">🖨️</div>
+          <div class="pcb-opt-content">
+            <h4 class="pcb-opt-title">Model 3D Casing Enclosure (.stl)</h4>
+            <p class="pcb-opt-desc">
+              Model 3D box penutup snap-fit dengan standoff baut M3 & rongga port USB, siap cetak 3D Printer.
+            </p>
+            <button on:click={() => selectExport('enclosure-stl')} class="pcb-btn pcb-opt-btn">
+              <span>Unduh Casing 3D Enclosure (.stl)</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="pcb-modal-footer">

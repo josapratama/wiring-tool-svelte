@@ -60,6 +60,26 @@
         <span>◎</span>
         <span class="pcb-tool-lbl">Via</span>
       </button>
+
+      <button
+        class="pcb-tool-btn"
+        class:pcb-tool-active={activeTool === 'ruler'}
+        on:click={() => dispatch('tool-change', 'ruler')}
+        title="Alat Ukur Jarak CAD / Dimension Ruler mm (Shortcut: U)"
+      >
+        <span>📏</span>
+        <span class="pcb-tool-lbl">Ukur</span>
+      </button>
+
+      <button
+        class="pcb-tool-btn"
+        class:pcb-tool-active={activeTool === 'text'}
+        on:click={() => dispatch('tool-change', 'text')}
+        title="Pasang Teks / Label Silkscreen di PCB (Top/Bottom)"
+      >
+        <span>🔤</span>
+        <span class="pcb-tool-lbl">Teks Silk</span>
+      </button>
     </div>
 
     <div class="pcb-sep"></div>

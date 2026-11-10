@@ -241,6 +241,35 @@ export function runERC(components = [], wires = []) {
         compB: tc.instanceId
       })
     }
+
+    // --- RULE E: 3.3V GPIO to 5V Signal Hazard (Missing Level Shifter) ---
+    const isMcu33 = (c) => {
+      const id = (c.id || '').toLowerCase()
+      return id.includes('esp32') || id.includes('pico') || id.includes('rp2040') || id.includes('stm32') || id.includes('nano33')
+    }
+    const is5vSource = (c, p) => {
+      const id = (c.id || '').toLowerCase()
+      return (id.includes('uno') || id.includes('nano') || id.includes('5v') || p.voltage === 5) && !id.includes('divider') && !id.includes('shifter')
+    }
+
+    if ((isMcu33(fc) && is5vSource(tc, p2)) || (isMcu33(tc) && is5vSource(fc, p1))) {
+      const mcuComp = isMcu33(fc) ? fc : tc
+      const mcuPin = isMcu33(fc) ? p1 : p2
+      const srcComp = isMcu33(fc) ? tc : fc
+      const srcPin = isMcu33(fc) ? p2 : p1
+
+      if (mcuPin.type !== 'power' && !mcuPin.isGnd && srcPin.type !== 'power' && !srcPin.isGnd) {
+        issues.push({
+          id: `erc_level_shifter_${wire.id}`,
+          level: 'warning',
+          title: '⚠️ Bahaya Tegangan Logika (3.3V vs 5V)',
+          desc: `Pin GPIO ${mcuComp.label || mcuComp.id}.${mcuPin.label} (toleransi 3.3V) terhubung langsung ke pin sinyal 5V ${srcComp.label || srcComp.id}.${srcPin.label}. Rekomendasi: Pasang Logic Level Converter 5V→3.3V atau Voltage Divider (1kΩ/2kΩ) agar pin mikrokontroler tidak rusak/terbakar.`,
+          wireId: wire.id,
+          compA: fc.instanceId,
+          compB: tc.instanceId
+        })
+      }
+    }
   })
 
   // 2. Component-level checks (Missing GND / Power for active components)

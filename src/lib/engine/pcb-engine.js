@@ -123,6 +123,7 @@ export const STANDARD_FOOTPRINTS = {
     widthMm: 28.0,
     heightMm: 51.5,
     pads: generateDipPads(19, 19, 25.4, 2.54, 1.8, 1.0, "round"),
+    keepout: { x: -11.0, y: 15.0, w: 22.0, h: 10.5, desc: "Wi-Fi/BLE Antenna Keepout Zone" },
     silkscreen: [
       { type: "rect", x: -14.0, y: -25.75, w: 28.0, h: 51.5, r: 1.0 },
       { type: "rect", x: -7.0, y: -24.5, w: 14.0, h: 8.0, r: 0.5, desc: "USB" },
@@ -1392,4 +1393,144 @@ export function generatePcbTeardrops(traces = [], pcbComponents = [], vias = [])
   }
 
   return teardrops;
+}
+
+// ── JLCPCB SMT Pick-and-Place (CPL / Centroid CSV) ────────────────────────────
+export function generatePickAndPlaceCplCsv(board, pcbComponents = []) {
+  const lines = [
+    'Designator,Val,Package,Mid X,Mid Y,Rotation,Layer'
+  ];
+
+  const boardHeight = board?.heightMm || 80;
+
+  pcbComponents.forEach((comp, idx) => {
+    const des = comp.prefix ? `${comp.prefix}${comp.index || idx + 1}` : (comp.label || `U${idx + 1}`);
+    const val = comp.value || comp.label || comp.id || 'N/A';
+    const pkg = comp.footprint?.package || comp.footprintId || 'STANDARD-TH';
+    
+    // JLCPCB standard coordinates: origin at bottom-left corner
+    const midX = `${Number(comp.xMm || 0).toFixed(2)}mm`;
+    const midY = `${Number(boardHeight - (comp.yMm || 0)).toFixed(2)}mm`;
+    const rot = `${comp.rotation || 0}`;
+    const layer = comp.layer === 'bottom' ? 'Bottom' : 'Top';
+
+    lines.push(`"${des}","${val}","${pkg}",${midX},${midY},${rot},${layer}`);
+  });
+
+  return lines.join('\r\n');
+}
+
+// ── Thermal Relief Spokes for Ground Plane Copper Pour ────────────────────────
+export function generateThermalReliefs(pcbComponents = [], vias = []) {
+  const reliefs = [];
+  let reliefId = 1;
+
+  pcbComponents.forEach(comp => {
+    const fp = comp.footprint;
+    if (!fp || !fp.pads) return;
+    const isRotated90 = (comp.rotation || 0) % 180 !== 0;
+
+    fp.pads.forEach(pad => {
+      const padNet = (pad.name || '').toUpperCase();
+      if (padNet === 'GND' || padNet === 'VSS' || padNet.includes('GND')) {
+        const px = comp.xMm + (isRotated90 ? -pad.y : pad.x);
+        const py = comp.yMm + (isRotated90 ? pad.x : pad.y);
+        const r = (pad.sizeMm || 1.8) / 2;
+
+        reliefs.push({
+          id: `tr-${reliefId++}`,
+          x: Number(px.toFixed(2)),
+          y: Number(py.toFixed(2)),
+          radius: Number(r.toFixed(2)),
+          spokeW: 0.45,
+          gap: 0.35
+        });
+      }
+    });
+  });
+
+  return reliefs;
+}
+
+// ── 3D Enclosure / Casing STL Generator (Ready for 3D Slicers) ─────────────────
+export function generateEnclosureStl(board, options = {}) {
+  const bw = board?.widthMm || 100;
+  const bh = board?.heightMm || 80;
+  const wall = options.wallThickness || 2.0;
+  const floor = options.floorThickness || 2.0;
+  const depth = options.depthMm || 22.0;
+  const clearance = options.clearance || 0.8;
+  const standoffH = options.standoffHeight || 5.0;
+
+  const totalW = bw + (wall + clearance) * 2;
+  const totalH = bh + (wall + clearance) * 2;
+
+  const facets = [];
+
+  function addQuad(p1, p2, p3, p4, nx = 0, ny = 0, nz = 0) {
+    facets.push({ p1, p2, p3, nx, ny, nz });
+    facets.push({ p1: p1, p2: p3, p3: p4, nx, ny, nz });
+  }
+
+  function addBox(x, y, z, w, h, d) {
+    // Bottom
+    addQuad([x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z], 0, 0, -1);
+    // Top
+    addQuad([x, y, z + d], [x, y + h, z + d], [x + w, y + h, z + d], [x + w, y, z + d], 0, 0, 1);
+    // Front
+    addQuad([x, y, z], [x, y, z + d], [x + w, y, z + d], [x + w, y, z], 0, -1, 0);
+    // Back
+    addQuad([x, y + h, z], [x + w, y + h, z], [x + w, y + h, z + d], [x, y + h, z + d], 0, 1, 0);
+    // Left
+    addQuad([x, y, z], [x, y + h, z], [x, y + h, z + d], [x, y, z + d], -1, 0, 0);
+    // Right
+    addQuad([x + w, y, z], [x + w, y, z + d], [x + w, y + h, z + d], [x + w, y + h, z], 1, 0, 0);
+  }
+
+  // 1. Base Floor
+  addBox(0, 0, 0, totalW, totalH, floor);
+
+  // 2. Outer Walls
+  // Left wall
+  addBox(0, 0, floor, wall, totalH, depth);
+  // Right wall
+  addBox(totalW - wall, 0, floor, wall, totalH, depth);
+  // Front wall (with USB port cutout in center-left)
+  const usbW = 14;
+  const usbH = 8;
+  const usbX = 18;
+  addBox(wall, 0, floor, usbX - wall, wall, depth);
+  addBox(usbX, 0, floor + usbH, usbW, wall, depth - usbH);
+  addBox(usbX + usbW, 0, floor, totalW - wall - (usbX + usbW), wall, depth);
+  // Back wall
+  addBox(wall, totalH - wall, floor, totalW - wall * 2, wall, depth);
+
+  // 3. Standoff Posts for 4 M3 corner mounting screws
+  const postSize = 6.0;
+  const postMargin = 4.0;
+  const posts = [
+    [wall + clearance + postMargin, wall + clearance + postMargin],
+    [totalW - wall - clearance - postMargin - postSize, wall + clearance + postMargin],
+    [wall + clearance + postMargin, totalH - wall - clearance - postMargin - postSize],
+    [totalW - wall - clearance - postMargin - postSize, totalH - wall - clearance - postMargin - postSize]
+  ];
+
+  posts.forEach(([px, py]) => {
+    addBox(px, py, floor, postSize, postSize, standoffH);
+  });
+
+  // Construct ASCII STL output
+  let stl = 'solid circuit_craft_enclosure\r\n';
+  facets.forEach(f => {
+    stl += `  facet normal ${f.nx} ${f.ny} ${f.nz}\r\n`;
+    stl += '    outer loop\r\n';
+    stl += `      vertex ${f.p1[0].toFixed(3)} ${f.p1[1].toFixed(3)} ${f.p1[2].toFixed(3)}\r\n`;
+    stl += `      vertex ${f.p2[0].toFixed(3)} ${f.p2[1].toFixed(3)} ${f.p2[2].toFixed(3)}\r\n`;
+    stl += `      vertex ${f.p3[0].toFixed(3)} ${f.p3[1].toFixed(3)} ${f.p3[2].toFixed(3)}\r\n`;
+    stl += '    endloop\r\n';
+    stl += '  endfacet\r\n';
+  });
+  stl += 'endsolid circuit_craft_enclosure\r\n';
+
+  return stl;
 }

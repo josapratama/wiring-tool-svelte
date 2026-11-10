@@ -139,6 +139,9 @@
       <button class="rdd-item" on:click={() => triggerAction('open-serial-monitor')}>
         <span class="rdd-icon">📟</span> Virtual Serial Terminal & Analyzer
       </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-oscilloscope')}>
+        <span class="rdd-icon">📊</span> Oskiloskop Virtual 2-Kanal (Analog)
+      </button>
 
     {:else if activeMenu === 'help'}
       <button class="rdd-item" on:click={() => triggerAction('open-help')}>

@@ -12,6 +12,8 @@
   export let enableTeardrops = true
   export let copperTracesCount = 0
   export let viasCount = 0
+  export let dimensionsCount = 0
+  export let customTextsCount = 0
   export let drcResults = { errors: [], warnings: [], ok: true, clean: true }
   export let bomCostEstimate = { totalCostUsd: 0, pcbFabCostUsd: 0, componentsCostUsd: 0, areaCm2: 0, leadTimeDays: '3-4 Hari' }
 
@@ -142,6 +144,33 @@
         <span>Bersihkan Semua Jalur & Via</span>
       </button>
     </div>
+
+    <!-- Section 3b: CAD Dimensions & Silkscreen Text -->
+    {#if dimensionsCount > 0 || customTextsCount > 0}
+      <div class="pcb-card">
+        <h4 class="pcb-card-title">Pengukuran CAD & Silkscreen</h4>
+        {#if dimensionsCount > 0}
+          <div class="pcb-stat-row">
+            <span>Garis Ukur (Ruler):</span>
+            <span class="pcb-stat-val">{dimensionsCount} ukuran</span>
+          </div>
+          <button on:click={() => dispatch('clear-dimensions')} class="pcb-btn pcb-btn-full" style="margin-top: 6px; margin-bottom: 6px;">
+            <span>📏</span>
+            <span>Hapus Semua Garis Ukur CAD</span>
+          </button>
+        {/if}
+        {#if customTextsCount > 0}
+          <div class="pcb-stat-row">
+            <span>Teks Silkscreen:</span>
+            <span class="pcb-stat-val">{customTextsCount} label</span>
+          </div>
+          <button on:click={() => dispatch('clear-texts')} class="pcb-btn pcb-btn-full" style="margin-top: 6px;">
+            <span>🔤</span>
+            <span>Hapus Teks Silkscreen</span>
+          </button>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Section 4: DRC CAD Audit -->
     <div class="pcb-card">

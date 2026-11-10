@@ -45,7 +45,8 @@
     getFootprintForComponent, generateRatsnestLines, runPcbDrcCheck,
     generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg,
     autoRoutePcbNets, generateCopperPourSvgPath, estimatePcbBOMCost,
-    generatePcbTeardrops
+    generatePcbTeardrops, generatePickAndPlaceCplCsv, generateEnclosureStl,
+    generateThermalReliefs
   } from '$lib/engine/pcb-engine.js'
 
   import PcbRibbon from './pcb/PcbRibbon.svelte'
@@ -61,6 +62,18 @@
   let cornerRadiusMm = 3
   let mountingHoles = true
   let showCopperPour = false
+  let enableTeardrops = true
+
+  // ── CAD Measuring Ruler & Custom Silkscreen State ───────────────────────────
+  let pcbDimensions = [] // { id, x1, y1, x2, y2, distMm, dx, dy }
+  let rulerStart = null
+  let rulerCurrent = null
+
+  let customSilkscreenTexts = [
+    { id: 'txt-1', text: 'VER 1.0', xMm: 12, yMm: 72, layer: 'top', sizeMm: 2.0, rotation: 0 },
+    { id: 'txt-2', text: 'JLCPCB / PCBWay', xMm: 80, yMm: 72, layer: 'top', sizeMm: 1.6, rotation: 0 }
+  ]
+  let selectedTextId = null
 
   // ── Auto-Router & Fab Estimator State ───────────────────────────────────────
   let isAutoRouting = false
@@ -78,7 +91,7 @@
   let panStartY = 0
 
   // ── PCB Tools & Layers ──────────────────────────────────────────────────────
-  let activeTool = 'select' // 'select' | 'route' | 'via'
+  let activeTool = 'select' // 'select' | 'route' | 'via' | 'ruler' | 'text'
   let activeLayer = 'top' // 'top' (F.Cu - Red) | 'bottom' (B.Cu - Blue)
   let activeTraceWidth = 0.40 // mm (0.25, 0.40, 0.80, 1.20)
 
@@ -86,11 +99,11 @@
   let pcbComponents = []
   $: copperTraces = $copperTracesStore
   $: vias = $pcbViasStore
+  $: thermalReliefs = showCopperPour ? generateThermalReliefs(pcbComponents, vias) : []
   let selectedCompId = null
   let selectedTraceId = null
   $: selectedCompObj = pcbComponents.find(c => c.instanceId === selectedCompId) || null
 
-  let enableTeardrops = true
   $: teardrops = enableTeardrops ? generatePcbTeardrops(copperTraces, pcbComponents, vias) : []
 
   function handleRipUpNet(netId) {
@@ -106,6 +119,20 @@
     else if (type === 'easyeda-json') triggerEasyEdaExport()
     else if (type === 'svg-top') triggerEtchingSvgExport('top', false)
     else if (type === 'svg-bottom') triggerEtchingSvgExport('bottom', false)
+    else if (type === 'cpl-csv') triggerCplExport()
+    else if (type === 'enclosure-stl') triggerEnclosureStlExport()
+  }
+
+  function triggerCplExport() {
+    const csvContent = generatePickAndPlaceCplCsv({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents)
+    downloadFile('JLCPCB_PickAndPlace_CPL.csv', csvContent, 'text/csv;charset=utf-8')
+    exportSuccessMsg = 'File CPL Centroid (Pick & Place) berhasil diunduh untuk perakitan SMT JLCPCB / PCBWay!'
+  }
+
+  function triggerEnclosureStlExport() {
+    const stlContent = generateEnclosureStl({ widthMm: boardWidthMm, heightMm: boardHeightMm })
+    downloadFile('circuit_craft_enclosure_box.stl', stlContent, 'model/stl')
+    exportSuccessMsg = 'File 3D Enclosure Casing (.stl) berhasil diunduh! Siap dicetak dengan 3D Printer.'
   }
 
   // ── Active Interactive Routing State ────────────────────────────────────────
@@ -236,6 +263,17 @@
         snapToPcbGrid(rawY, gridStepMm)
       )
       routingCurrent = snapped
+    }
+
+    // Interactive CAD ruler measurement preview
+    if (activeTool === 'ruler' && rulerStart) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const rawX = (e.clientX - rect.left - panX) / zoom
+      const rawY = (e.clientY - rect.top - panY) / zoom
+      rulerCurrent = {
+        xMm: Number(snapToPcbGrid(rawX, gridStepMm).toFixed(2)),
+        yMm: Number(snapToPcbGrid(rawY, gridStepMm).toFixed(2))
+      }
     }
   }
 
@@ -420,6 +458,64 @@
   }
 
   function handleCanvasClick(e) {
+    if (activeTool === 'ruler') {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const mouseSvgX = (e.clientX - rect.left - panX) / zoom
+      const mouseSvgY = (e.clientY - rect.top - panY) / zoom
+      const mmX = Number(snapToPcbGrid(mouseSvgX, gridStepMm).toFixed(2))
+      const mmY = Number(snapToPcbGrid(mouseSvgY, gridStepMm).toFixed(2))
+
+      if (!rulerStart) {
+        rulerStart = { xMm: mmX, yMm: mmY }
+        rulerCurrent = { xMm: mmX, yMm: mmY }
+      } else {
+        const dist = Math.hypot(mmX - rulerStart.xMm, mmY - rulerStart.yMm)
+        if (dist >= 0.5) {
+          pcbDimensions = [
+            ...pcbDimensions,
+            {
+              id: 'dim-' + Date.now(),
+              x1: rulerStart.xMm,
+              y1: rulerStart.yMm,
+              x2: mmX,
+              y2: mmY,
+              distMm: Number(dist.toFixed(2)),
+              dx: Number(Math.abs(mmX - rulerStart.xMm).toFixed(2)),
+              dy: Number(Math.abs(mmY - rulerStart.yMm).toFixed(2))
+            }
+          ]
+        }
+        rulerStart = null
+        rulerCurrent = null
+      }
+      return
+    }
+
+    if (activeTool === 'text') {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const mouseSvgX = (e.clientX - rect.left - panX) / zoom
+      const mouseSvgY = (e.clientY - rect.top - panY) / zoom
+      const mmX = Number(snapToPcbGrid(mouseSvgX, gridStepMm).toFixed(2))
+      const mmY = Number(snapToPcbGrid(mouseSvgY, gridStepMm).toFixed(2))
+
+      const defaultText = prompt('Masukkan teks silkscreen untuk PCB:', 'GND / TX / RX')
+      if (defaultText && defaultText.trim()) {
+        customSilkscreenTexts = [
+          ...customSilkscreenTexts,
+          {
+            id: 'txt-' + Date.now(),
+            text: defaultText.trim(),
+            xMm: mmX,
+            yMm: mmY,
+            layer: activeLayer,
+            sizeMm: 2.0,
+            rotation: 0
+          }
+        ]
+      }
+      return
+    }
+
     if (activeTool === 'via') {
       const rect = e.currentTarget.getBoundingClientRect()
       const mouseSvgX = (e.clientX - rect.left - panX) / zoom
@@ -647,6 +743,10 @@
           <pattern id="pcb-grid-pattern" width={gridStepMm * zoom} height={gridStepMm * zoom} patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.75" fill="#334155" opacity="0.65" />
           </pattern>
+          <!-- Keepout Hatching Pattern -->
+          <pattern id="pcb-keepout-pattern" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="4" stroke="#ef4444" stroke-width="0.8" opacity="0.6" />
+          </pattern>
         </defs>
 
         <!-- World Transform Container -->
@@ -704,6 +804,14 @@
               stroke-dasharray="1 1"
               pointer-events="none"
             />
+            <!-- Thermal Relief Spokes for Ground Pads -->
+            <g id="thermal-reliefs-layer">
+              {#each thermalReliefs as tr (tr.id)}
+                <circle cx={tr.x} cy={tr.y} r={tr.radius + tr.gap} fill="none" stroke="#062e17" stroke-width={tr.gap} pointer-events="none" />
+                <line x1={tr.x - tr.radius - tr.gap} y1={tr.y} x2={tr.x + tr.radius + tr.gap} y2={tr.y} stroke="#38bdf8" stroke-width={tr.spokeW} pointer-events="none" />
+                <line x1={tr.x} y1={tr.y - tr.radius - tr.gap} x2={tr.x} y2={tr.y + tr.radius + tr.gap} stroke="#38bdf8" stroke-width={tr.spokeW} pointer-events="none" />
+              {/each}
+            </g>
           {/if}
 
           <!-- B. Ratsnest Air-Wires (Dashed Yellow Connectivity Guides) -->
@@ -847,6 +955,33 @@
                   />
                 {/if}
 
+                <!-- Keepout Area (RF Antenna / High Voltage Isolation) -->
+                {#if fp.keepout}
+                  <rect
+                    x={fp.keepout.x}
+                    y={fp.keepout.y}
+                    width={fp.keepout.w}
+                    height={fp.keepout.h}
+                    fill="url(#pcb-keepout-pattern)"
+                    stroke="#ef4444"
+                    stroke-width="0.3"
+                    stroke-dasharray="0.8, 0.6"
+                    pointer-events="none"
+                  />
+                  <text
+                    x={fp.keepout.x + fp.keepout.w / 2}
+                    y={fp.keepout.y + fp.keepout.h / 2 + 0.4}
+                    font-size="1.2"
+                    font-family="monospace"
+                    font-weight="bold"
+                    fill="#f87171"
+                    text-anchor="middle"
+                    pointer-events="none"
+                  >
+                    KEEPOUT
+                  </text>
+                {/if}
+
                 <!-- Silkscreen Geometry (White outline & component markings) -->
                 {#if showSilkscreen}
                   <g stroke="#ffffff" stroke-width="0.22" fill="none" opacity="0.88" pointer-events="none">
@@ -918,6 +1053,69 @@
 
               </g>
             {/each}
+          </g>
+
+          <!-- Custom Silkscreen Text Annotations Layer -->
+          {#if showSilkscreen}
+            <g id="custom-silkscreen-layer">
+              {#each customSilkscreenTexts as st (st.id)}
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <g
+                  transform="translate({st.xMm}, {st.yMm}) rotate({st.rotation || 0})"
+                  class="pcb-silk-text"
+                  role="button"
+                  tabindex="0"
+                  on:click={(e) => { e.stopPropagation(); selectedTextId = st.id }}
+                >
+                  <text
+                    x="0" y="0"
+                    font-size={st.sizeMm || 2.0}
+                    font-family="monospace"
+                    font-weight="bold"
+                    fill={st.layer === 'bottom' ? '#93c5fd' : '#ffffff'}
+                    text-anchor="middle"
+                    stroke={selectedTextId === st.id ? '#38bdf8' : 'none'}
+                    stroke-width={selectedTextId === st.id ? '0.3' : '0'}
+                    cursor="pointer"
+                  >
+                    {st.text}
+                  </text>
+                </g>
+              {/each}
+            </g>
+          {/if}
+
+          <!-- CAD Dimension Ruler Annotations Layer -->
+          <g id="cad-dimensions-layer">
+            {#each pcbDimensions as dim (dim.id)}
+              {@const midX = (dim.x1 + dim.x2) / 2}
+              {@const midY = (dim.y1 + dim.y2) / 2}
+              <g class="pcb-dimension-item">
+                <line x1={dim.x1} y1={dim.y1} x2={dim.x2} y2={dim.y2} stroke="#38bdf8" stroke-width="0.3" stroke-dasharray="1,0.6" />
+                <circle cx={dim.x1} cy={dim.y1} r="0.8" fill="#38bdf8" />
+                <circle cx={dim.x2} cy={dim.y2} r="0.8" fill="#38bdf8" />
+                <rect x={midX - 12} y={midY - 2.5} width="24" height="5" rx="1.2" fill="#0f172a" stroke="#38bdf8" stroke-width="0.3" />
+                <text x={midX} y={midY + 0.9} font-size="1.8" font-family="monospace" font-weight="bold" fill="#38bdf8" text-anchor="middle">
+                  ↔ {dim.distMm}mm
+                </text>
+              </g>
+            {/each}
+
+            <!-- Live Measuring Preview -->
+            {#if activeTool === 'ruler' && rulerStart && rulerCurrent}
+              {@const curDist = Math.hypot(rulerCurrent.xMm - rulerStart.xMm, rulerCurrent.yMm - rulerStart.yMm)}
+              {@const curMidX = (rulerStart.xMm + rulerCurrent.xMm) / 2}
+              {@const curMidY = (rulerStart.yMm + rulerCurrent.yMm) / 2}
+              <g class="pcb-ruler-preview">
+                <line x1={rulerStart.xMm} y1={rulerStart.yMm} x2={rulerCurrent.xMm} y2={rulerCurrent.yMm} stroke="#f59e0b" stroke-width="0.4" stroke-dasharray="1.2,0.8" />
+                <circle cx={rulerStart.xMm} cy={rulerStart.yMm} r="1.0" fill="#f59e0b" />
+                <circle cx={rulerCurrent.xMm} cy={rulerCurrent.yMm} r="1.0" fill="#f59e0b" />
+                <rect x={curMidX - 14} y={curMidY - 3} width="28" height="6" rx="1.5" fill="#1e293b" stroke="#f59e0b" stroke-width="0.4" />
+                <text x={curMidX} y={curMidY + 1.2} font-size="2.0" font-family="monospace" font-weight="bold" fill="#facc15" text-anchor="middle">
+                  📏 {curDist.toFixed(2)} mm
+                </text>
+              </g>
+            {/if}
           </g>
 
           <!-- E. DRC Active Highlight Target Pulsing Marker -->
@@ -1008,12 +1206,16 @@
         {selectedTraceId}
         copperTracesCount={copperTraces.length}
         viasCount={vias.length}
+        dimensionsCount={pcbDimensions.length}
+        customTextsCount={customSilkscreenTexts.length}
         {drcResults}
         {bomCostEstimate}
         on:close={() => showInspector = false}
         on:rotate-component={() => rotateSelectedComponent(90)}
         on:delete-selected-trace={deleteSelectedTrace}
         on:clear-all-traces={clearAllTraces}
+        on:clear-dimensions={() => pcbDimensions = []}
+        on:clear-texts={() => customSilkscreenTexts = []}
         on:rip-up-net={e => handleRipUpNet(e.detail)}
         on:toggle-teardrops={e => enableTeardrops = e.detail}
         on:auto-arrange={autoArrangeComponents}

@@ -81,6 +81,53 @@
     return jpts
   }
 
+  function computeWireCrossings(rw) {
+    const crossList = []
+    const segs = []
+    rw.forEach(r => {
+      const pts = r.pts || []
+      for (let i = 0; i < pts.length - 1; i++) {
+        segs.push({
+          p1: pts[i],
+          p2: pts[i + 1],
+          wire: r.wire,
+          isHorizontal: Math.abs(pts[i].y - pts[i + 1].y) < 1.5,
+          isVertical: Math.abs(pts[i].x - pts[i + 1].x) < 1.5
+        })
+      }
+    })
+
+    for (let i = 0; i < segs.length; i++) {
+      for (let j = 0; j < segs.length; j++) {
+        if (i === j) continue
+        const sH = segs[i]
+        const sV = segs[j]
+        if (sH.wire.id === sV.wire.id) continue
+        if (!sH.isHorizontal || !sV.isVertical) continue
+
+        const xHmin = Math.min(sH.p1.x, sH.p2.x) + 5
+        const xHmax = Math.max(sH.p1.x, sH.p2.x) - 5
+        const yVmin = Math.min(sV.p1.y, sV.p2.y) + 5
+        const yVmax = Math.max(sV.p1.y, sV.p2.y) - 5
+
+        const ix = sV.p1.x
+        const iy = sH.p1.y
+
+        if (ix > xHmin && ix < xHmax && iy > yVmin && iy < yVmax) {
+          crossList.push({
+            id: `cr-${sH.wire.id}-${sV.wire.id}-${Math.round(ix)}-${Math.round(iy)}`,
+            x: ix,
+            y: iy,
+            color: sH.wire.color || '#4f9cf9'
+          })
+        }
+      }
+    }
+    return crossList
+  }
+
+  $: wireCrossings = computeWireCrossings(normalWires)
+
   $: previewPath = (() => {
     if (!previewData) return null
     const p1 = pinPos(previewData.fromComp)(previewData.fromPinId)
@@ -196,6 +243,14 @@
     <text x={labelX} y={labelY + 1} dominant-baseline="central" text-anchor="middle"
       fill={col} style="font:700 11px 'Consolas',monospace">{wire.label}</text>
   </g>
+{/each}
+
+<!-- Wire Crossing Bridge Hops (IEEE Standard 4-Way Jumps) -->
+{#each wireCrossings as cr (cr.id)}
+  <!-- Mask horizontal wire underneath -->
+  <line x1={cr.x - 7} y1={cr.y} x2={cr.x + 7} y2={cr.y} stroke="#0b0f19" stroke-width="4.5" pointer-events="none" />
+  <!-- Semicircular arch bridge over vertical wire -->
+  <path d="M {cr.x - 6} {cr.y} A 6 6 0 0 1 {cr.x + 6} {cr.y}" fill="none" stroke={cr.color} stroke-width="2.5" pointer-events="none" />
 {/each}
 
 <!-- Junction dots -->

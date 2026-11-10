@@ -18,6 +18,7 @@
   import StatsModal from '$lib/components/modals/StatsModal.svelte'
   import HelpModal from '$lib/components/modals/HelpModal.svelte'
   import VersionHistoryModal from '$lib/components/modals/VersionHistoryModal.svelte'
+  import OscilloscopeModal from '$lib/components/modals/OscilloscopeModal.svelte'
   import CustomComponentModal from '$lib/components/CustomComponentModal.svelte'
   import {
     exportDiagramSvg,
@@ -66,6 +67,7 @@
   let showShortcuts = false
   let showSnapshotModal = false
   let showCustomCompModal = false
+  let showScopeModal = false
 
   // Layout sidebars & status flash
   let showLeftSidebar = true
@@ -348,6 +350,7 @@
       case 'open-3d-view': is3dViewerOpen.set(true); break
       case 'open-serial':
       case 'open-serial-monitor': isSerialMonitorOpen.set(true); break
+      case 'open-oscilloscope': showScopeModal = true; break
       case 'pcb-inspector':
       case 'open-pcb-inspector': triggerPcbInspector(); break
       case 'shortcuts':
@@ -754,6 +757,9 @@
     bind:show={showCustomCompModal}
     on:created={() => flash('Komponen kustom baru berhasil disimpan ke EELib ✓')}
   />
+
+  <!-- ⚡ 2-Channel Virtual Oscilloscope Modal -->
+  <OscilloscopeModal bind:show={showScopeModal} />
 </div>
 
 <style>
