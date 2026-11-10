@@ -31,6 +31,7 @@
   import { generateWokwiDiagram } from '$lib/engine/wokwi.js'
   import Pcb3dViewerModal from '$lib/components/Pcb3dViewerModal.svelte'
   import SerialMonitorModal from '$lib/components/SerialMonitorModal.svelte'
+  import BomCostEstimatorModal from '$lib/components/BomCostEstimatorModal.svelte'
   import { onMount }     from 'svelte'
 
   let canvasRef = {}  // filled by Canvas via bind:api
@@ -42,6 +43,7 @@
   let showCodeGenModal = false
   let showWokwiModal = false
   let showQuickPalette = false
+  let showBomModal = false
 
   // Responsive sidebars & menus
   let showLeftSidebar = true
@@ -293,21 +295,10 @@
     flash(`Netlist exported (${nets.length} nets) ✓`)
   }
 
-  // Feature #F2: Export BOM as CSV
+  // Feature #F2: Export BOM as CSV & Open Maker BOM Studio
   function exportBOM() {
-    const bom = getBOM()
-    if (!bom.length) { flash('⚠ No components yet', '#f59e0b'); return }
-    const rows = [
-      ['Qty','ComponentID','Theme','Labels','Notes'],
-      ...bom.map(b => [
-        b.qty, b.id, b.theme,
-        b.instances.map(i => i.label).join('; '),
-        b.instances.map(i => i.notes).filter(Boolean).join('; ')
-      ])
-    ]
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
-    dl(csv, (projectName||'wiring')+'-bom.csv', 'text/csv')
-    flash(`BOM exported (${bom.length} types) ✓`)
+    showBomModal = true
+    flash('📋 Membuka Maker BOM Studio & Cost Estimator...')
   }
 
   // Feature: Shareable URL via Hash
@@ -714,7 +705,7 @@
                 <span class="rdd-icon">🔌</span> Export Netlist (CSV)
               </button>
               <button class="rdd-item" on:click={() => { exportBOM(); activeRibbon = null }}>
-                <span class="rdd-icon">📋</span> Export BOM (CSV)
+                <span class="rdd-icon">📋</span> Maker BOM & Biaya Fabrikasi
               </button>
               <button class="rdd-item" on:click={() => { showWokwiModal = true; activeRibbon = null }}>
                 <span class="rdd-icon">🚀</span> Wokwi Simulation JSON
@@ -1001,8 +992,8 @@
             <button class="dd-item" on:click={() => { exportBOM(); showExportMenu = false }}>
               <span class="dd-icon">📋</span>
               <div class="dd-info">
-                <span class="dd-label">Bill of Materials (BOM)</span>
-                <span class="dd-desc">Daftar kuantitas & spesifikasi part</span>
+                <span class="dd-label">Maker BOM & Fab Estimator</span>
+                <span class="dd-desc">Kalkulator part JLCPCB, footprint & estimasi biaya</span>
               </div>
             </button>
           </div>
@@ -1276,6 +1267,9 @@
   {#if $isSerialMonitorOpen}
     <SerialMonitorModal onClose={() => isSerialMonitorOpen.set(false)} />
   {/if}
+
+  <!-- 📋 Maker BOM & Fabrication Cost Estimator Modal -->
+  <BomCostEstimatorModal bind:show={showBomModal} {projectName} />
 </div>
 
 <style>
