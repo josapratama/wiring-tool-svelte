@@ -624,18 +624,63 @@ export function generateRatsnestLines(pcbComponents = [], wires = [], copperTrac
       }
     }
 
+    // Build connectivity graph of copper traces for this net
+    const netTraces = copperTraces.filter(t => !t.netId || t.netId === netId);
+    const traceDsu = new DisjointSet();
+    
+    // Union overlapping trace endpoints
+    for (let i = 0; i < netTraces.length; i++) {
+      const t1 = netTraces[i];
+      const p1Start = `${t1.x1.toFixed(1)}_${t1.y1.toFixed(1)}`;
+      const p1End = `${t1.x2.toFixed(1)}_${t1.y2.toFixed(1)}`;
+      traceDsu.union(p1Start, p1End);
+
+      for (let j = i + 1; j < netTraces.length; j++) {
+        const t2 = netTraces[j];
+        const p2Start = `${t2.x1.toFixed(1)}_${t2.y1.toFixed(1)}`;
+        const p2End = `${t2.x2.toFixed(1)}_${t2.y2.toFixed(1)}`;
+
+        if (Math.hypot(t1.x1 - t2.x1, t1.y1 - t2.y1) < 0.8) traceDsu.union(p1Start, p2Start);
+        if (Math.hypot(t1.x1 - t2.x2, t1.y1 - t2.y2) < 0.8) traceDsu.union(p1Start, p2End);
+        if (Math.hypot(t1.x2 - t2.x1, t1.y2 - t2.y1) < 0.8) traceDsu.union(p1End, p2Start);
+        if (Math.hypot(t1.x2 - t2.x2, t1.y2 - t2.y2) < 0.8) traceDsu.union(p1End, p2End);
+      }
+    }
+
     // Check each MST edge to see if a copper trace already connects the two pads
     for (const edge of edges) {
       const p1 = edge.from;
       const p2 = edge.to;
 
-      const isRouted = copperTraces.some(t => {
+      // Direct single segment check
+      let isRouted = copperTraces.some(t => {
         const d1 = Math.hypot(t.x1 - p1.xMm, t.y1 - p1.yMm);
         const d2 = Math.hypot(t.x2 - p2.xMm, t.y2 - p2.yMm);
         const d1Rev = Math.hypot(t.x1 - p2.xMm, t.y1 - p2.yMm);
         const d2Rev = Math.hypot(t.x2 - p1.xMm, t.y2 - p1.yMm);
-        return (d1 < 1.2 && d2 < 1.2) || (d1Rev < 1.2 && d2Rev < 1.2);
+        return (d1 < 1.6 && d2 < 1.6) || (d1Rev < 1.6 && d2Rev < 1.6);
       });
+
+      // Multi-segment trace network check
+      if (!isRouted && netTraces.length > 0) {
+        let p1Root = null;
+        let p2Root = null;
+
+        for (const t of netTraces) {
+          const pStart = `${t.x1.toFixed(1)}_${t.y1.toFixed(1)}`;
+
+          if (Math.hypot(t.x1 - p1.xMm, t.y1 - p1.yMm) < 1.8 || Math.hypot(t.x2 - p1.xMm, t.y2 - p1.yMm) < 1.8) {
+            p1Root = traceDsu.find(pStart);
+          }
+          if (Math.hypot(t.x1 - p2.xMm, t.y1 - p2.yMm) < 1.8 || Math.hypot(t.x2 - p2.xMm, t.y2 - p2.yMm) < 1.8) {
+            p2Root = traceDsu.find(pStart);
+          }
+        }
+
+        if (p1Root !== null && p2Root !== null && p1Root === p2Root) {
+          isRouted = true;
+        }
+      }
 
       if (!isRouted) {
         ratsnest.push({

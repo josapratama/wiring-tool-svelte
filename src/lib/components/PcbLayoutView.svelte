@@ -46,7 +46,7 @@
     generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg,
     autoRoutePcbNets, generateCopperPourSvgPath, estimatePcbBOMCost,
     generatePcbTeardrops, generatePickAndPlaceCplCsv, generateEnclosureStl,
-    generateThermalReliefs
+    generateThermalReliefs, buildPcbNetlist, getCompPadAliases
   } from '$lib/engine/pcb-engine.js'
 
   import PcbRibbon from './pcb/PcbRibbon.svelte'
@@ -250,19 +250,29 @@
       return
     }
 
-    // Interactive routing cursor position
-    if (activeTool === 'route' && routingStart) {
+    // Interactive routing cursor position with magnetic pad snap
+    if (activeTool === 'route') {
       const rect = e.currentTarget.getBoundingClientRect()
       const rawX = (e.clientX - rect.left - panX) / zoom
       const rawY = (e.clientY - rect.top - panY) / zoom
-      
-      const snapped = snapTo45Degrees(
-        routingStart.xMm,
-        routingStart.yMm,
-        snapToPcbGrid(rawX, gridStepMm),
-        snapToPcbGrid(rawY, gridStepMm)
-      )
-      routingCurrent = snapped
+
+      // Detect pad magnetic snap
+      const nearPad = findSnapPad(rawX, rawY, 3.5)
+      snappedPad = nearPad
+
+      if (routingStart) {
+        if (nearPad) {
+          routingCurrent = { xMm: nearPad.xMm, yMm: nearPad.yMm }
+        } else {
+          const snapped = snapTo45Degrees(
+            routingStart.xMm,
+            routingStart.yMm,
+            snapToPcbGrid(rawX, gridStepMm),
+            snapToPcbGrid(rawY, gridStepMm)
+          )
+          routingCurrent = snapped
+        }
+      }
     }
 
     // Interactive CAD ruler measurement preview
@@ -411,20 +421,88 @@
     }
   }
 
+  // ── Pad Coordinate & Net Discovery Helpers ─────────────────────────────────
+  let snappedPad = null
+
+  function getPadWorldPos(comp, pad) {
+    const rot = comp.rotation || 0
+    const rad = (rot * Math.PI) / 180
+    const cosR = Math.cos(rad)
+    const sinR = Math.sin(rad)
+    return {
+      x: Number((comp.xMm + (pad.x * cosR - pad.y * sinR)).toFixed(2)),
+      y: Number((comp.yMm + (pad.x * sinR + pad.y * cosR)).toFixed(2))
+    }
+  }
+
+  function getPadNetId(comp, pad, padIndex = 0) {
+    try {
+      const { pinToNetMap, dsu } = buildPcbNetlist(pcbComponents, $wiresStore)
+      const aliases = getCompPadAliases(comp, pad, padIndex)
+      for (const alias of aliases) {
+        const key = `${comp.instanceId}:${alias}`
+        if (pinToNetMap.has(key)) return pinToNetMap.get(key)
+        if (dsu.parent.has(key)) {
+          const root = dsu.find(key)
+          if (root) return pinToNetMap.get(root) || `NET_${root}`
+        }
+      }
+    } catch (err) {
+      console.warn('getPadNetId error:', err)
+    }
+    return null
+  }
+
+  function findSnapPad(worldX, worldY, maxDistMm = 3.5) {
+    let closest = null
+    let minDist = maxDistMm
+
+    for (const comp of pcbComponents) {
+      const fp = comp.footprint || getFootprintForComponent(comp)
+      if (!fp || !fp.pads) continue
+      const rot = comp.rotation || 0
+      const rad = (rot * Math.PI) / 180
+      const cosR = Math.cos(rad)
+      const sinR = Math.sin(rad)
+
+      for (let idx = 0; idx < fp.pads.length; idx++) {
+        const pad = fp.pads[idx]
+        const wx = comp.xMm + (pad.x * cosR - pad.y * sinR)
+        const wy = comp.yMm + (pad.x * sinR + pad.y * cosR)
+        const d = Math.hypot(worldX - wx, worldY - wy)
+        if (d < minDist) {
+          minDist = d
+          closest = {
+            comp,
+            pad,
+            padIndex: idx,
+            xMm: Number(wx.toFixed(2)),
+            yMm: Number(wy.toFixed(2))
+          }
+        }
+      }
+    }
+    return closest
+  }
+
   // ── Interactive Copper Trace Routing ────────────────────────────────────────
-  function handlePadClick(e, comp, pad, padXmm, padYmm) {
-    e.stopPropagation()
+  function handlePadClick(e, comp, pad, padXmm, padYmm, padIndex = 0) {
+    if (e && e.stopPropagation) e.stopPropagation()
 
     if (activeTool === 'route') {
+      const padNet = getPadNetId(comp, pad, padIndex)
+
       if (!routingStart) {
         // Start a new copper trace from this pad
         routingStart = {
           compId: comp.instanceId,
           padNum: pad.num,
           xMm: padXmm,
-          yMm: padYmm
+          yMm: padYmm,
+          netId: padNet
         }
         routingCurrent = { xMm: padXmm, yMm: padYmm }
+        if (padNet) activeHighlightedNet.set(padNet)
       } else {
         // Complete the trace segment to this destination pad
         if (routingStart.xMm !== padXmm || routingStart.yMm !== padYmm) {
@@ -434,26 +512,20 @@
             y1: routingStart.yMm,
             x2: padXmm,
             y2: padYmm,
-            widthMm: activeTraceWidth
+            widthMm: activeTraceWidth,
+            netId: routingStart.netId || padNet
           })
         }
         routingStart = null
         routingCurrent = null
+        snappedPad = null
+        updateRatsnest()
       }
     } else if (activeTool === 'select') {
       selectedCompId = comp.instanceId
       selectedTraceId = null
-      const pinId = String(pad.num || pad.name || '')
-      const connWire = $wiresStore.find(w =>
-        (w.fromComp === comp.instanceId && (w.fromPin === pinId || String(w.fromPin).toLowerCase() === pinId.toLowerCase())) ||
-        (w.toComp === comp.instanceId && (w.toPin === pinId || String(w.toPin).toLowerCase() === pinId.toLowerCase()))
-      )
-      if (connWire) {
-        const discNets = getDiscoveredNets()
-        const found = discNets.find(n => n.wires.some(w => w.id === connWire.id))
-        if (found) activeHighlightedNet.set(found.name)
-        else if (connWire.label) activeHighlightedNet.set(connWire.label)
-      }
+      const padNet = getPadNetId(comp, pad, padIndex)
+      if (padNet) activeHighlightedNet.set(padNet)
     }
   }
 
@@ -548,17 +620,28 @@
       return
     }
 
-    if (activeTool === 'route' && routingStart && routingCurrent) {
-      // Place an intermediate corner waypoint
-      addCopperTrace({
-        layer: activeLayer,
-        x1: routingStart.xMm,
-        y1: routingStart.yMm,
-        x2: routingCurrent.xMm,
-        y2: routingCurrent.yMm,
-        widthMm: activeTraceWidth
-      })
-      routingStart = { ...routingCurrent }
+    if (activeTool === 'route') {
+      // If cursor is near a pad, treat click as clicking that pad!
+      if (snappedPad) {
+        handlePadClick(e, snappedPad.comp, snappedPad.pad, snappedPad.xMm, snappedPad.yMm, snappedPad.padIndex)
+        return
+      }
+
+      if (routingStart && routingCurrent) {
+        // Place an intermediate corner waypoint
+        addCopperTrace({
+          layer: activeLayer,
+          x1: routingStart.xMm,
+          y1: routingStart.yMm,
+          x2: routingCurrent.xMm,
+          y2: routingCurrent.yMm,
+          widthMm: activeTraceWidth,
+          netId: routingStart.netId
+        })
+        routingStart = { ...routingCurrent, netId: routingStart.netId }
+        updateRatsnest()
+        return
+      }
     } else {
       selectedCompId = null
       selectedTraceId = null
@@ -1006,12 +1089,23 @@
                 {/if}
 
                 <!-- Pads (Annular Copper Rings with Drill Hole) -->
-                {#each fp.pads as pad}
+                {#each fp.pads as pad, idx}
+                  {@const worldPos = getPadWorldPos(comp, pad)}
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <g
                     class="pcb-pad-group"
-                    on:click={(e) => handlePadClick(e, comp, pad, comp.xMm + pad.x, comp.yMm + pad.y)}
+                    on:click={(e) => handlePadClick(e, comp, pad, worldPos.x, worldPos.y, idx)}
                   >
+                    <!-- Generous Invisible Click & Snap Area -->
+                    <circle
+                      cx={pad.x}
+                      cy={pad.y}
+                      r={Math.max(3.2, (pad.sizeMm || 1.8) * 1.4)}
+                      fill="transparent"
+                      pointer-events="all"
+                      cursor="crosshair"
+                    />
+
                     <!-- Copper Pad (Gold / Solder finish) -->
                     {#if pad.shape === 'rect'}
                       <rect
@@ -1055,7 +1149,21 @@
             {/each}
           </g>
 
-          <!-- Custom Silkscreen Text Annotations Layer -->
+          <!-- Magnetic Pad Snap Target Halo -->
+          {#if activeTool === 'route' && snappedPad}
+            <g id="magnetic-pad-snap" pointer-events="none">
+              <circle
+                cx={snappedPad.xMm}
+                cy={snappedPad.yMm}
+                r="3.5"
+                fill="rgba(74, 222, 128, 0.2)"
+                stroke="#4ade80"
+                stroke-width="0.5"
+                stroke-dasharray="1 0.6"
+              />
+              <circle cx={snappedPad.xMm} cy={snappedPad.yMm} r="1.0" fill="#4ade80" />
+            </g>
+          {/if}
           {#if showSilkscreen}
             <g id="custom-silkscreen-layer">
               {#each customSilkscreenTexts as st (st.id)}
