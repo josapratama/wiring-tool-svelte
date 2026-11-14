@@ -53,6 +53,7 @@
   import PcbInspector from './pcb/PcbInspector.svelte'
   import PcbExportModal from './pcb/PcbExportModal.svelte'
   import GerberInspectorModal from './pcb/GerberInspectorModal.svelte'
+  import PcbEtchModal from './pcb/PcbEtchModal.svelte'
   import JSZip from 'jszip'
 
   const dispatch = createEventDispatcher()
@@ -165,6 +166,7 @@
   // ── Inspector & Modal State ─────────────────────────────────────────────────
   let showInspector = true
   let showExportModal = false
+  let showEtchModal = false
   let showGerberInspector = false
   let inspectedGerbers = {}
   let exportSuccessMsg = ''
@@ -864,6 +866,7 @@
     on:grid-step-change={e => gridStepMm = e.detail}
     on:autoroute={triggerAutoRouter}
     on:open-3d={() => is3dViewerOpen.set(true)}
+    on:open-etch={() => showEtchModal = true}
     on:rotate-selected={() => rotateSelectedComponent(90)}
     on:toggle-inspector={() => showInspector = !showInspector}
     on:open-export={() => showExportModal = true}
@@ -1441,6 +1444,12 @@
     {boardHeightMm}
     on:download-zip={triggerGerberDownload}
     on:flash={e => exportSuccessMsg = e.detail}
+  />
+
+  <!-- 5. DIY Etching & Toner Transfer 1:1 Studio Modal -->
+  <PcbEtchModal
+    bind:show={showEtchModal}
+    projectName="PCB_Etching"
   />
 
 </div>

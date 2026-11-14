@@ -23,6 +23,14 @@
       </div>
     </button>
 
+    <button class="dd-item" on:click={() => selectAction('pcb-etch')}>
+      <span class="dd-icon">🖨️</span>
+      <div class="dd-info">
+        <span class="dd-label">Masker Sablon / Etching PCB (DIY 1:1)</span>
+        <span class="dd-desc">Cetak skala 100% untuk setrika / dry film</span>
+      </div>
+    </button>
+
     <div class="dd-divider"></div>
 
     <button class="dd-item" on:click={() => selectAction('png')}>

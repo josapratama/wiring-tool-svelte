@@ -1,5 +1,6 @@
 <script>
   import { CATEGORIES } from '$lib/data/components-db.js'
+  import { matchComponentSemantic } from '$lib/data/search-semantic.js'
   import { addComponent, pushHistory } from '$lib/store/diagram.js'
   import { createEventDispatcher, onMount } from 'svelte'
 
@@ -22,13 +23,7 @@
 
   $: filtered = query.trim() === ''
     ? allItems.slice(0, 15)
-    : allItems.filter(item => {
-        const q = query.toLowerCase()
-        return (item.name || '').toLowerCase().includes(q) ||
-               (item.desc || '').toLowerCase().includes(q) ||
-               (item.categoryLabel || '').toLowerCase().includes(q) ||
-               (item.id || '').toLowerCase().includes(q)
-      }).slice(0, 20)
+    : allItems.filter(item => matchComponentSemantic(item, query)).slice(0, 20)
 
   $: if (filtered.length > 0 && selectedIndex >= filtered.length) {
     selectedIndex = 0

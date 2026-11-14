@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { CATEGORIES, getCustomComponents, deleteCustomComponent } from '$lib/data/components-db.js'
+  import { matchComponentSemantic } from '$lib/data/search-semantic.js'
   import CustomComponentModal from './CustomComponentModal.svelte'
   import { showConfirm } from '../store/dialog.js'
   import {
@@ -30,7 +31,7 @@
 
   function filtered(items) {
     if (!searchQ) return items
-    return items.filter(i => (i.name || i.label || '').toLowerCase().includes(searchQ.toLowerCase()))
+    return items.filter(i => matchComponentSemantic(i, searchQ))
   }
 
   function highlight(name) {

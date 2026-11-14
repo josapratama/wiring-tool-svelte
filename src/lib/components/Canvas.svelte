@@ -189,6 +189,7 @@
   } : null
 
   let probeHover = null
+  let pinHoverHud = null
 
   function finishRubberBand() {
     if (!selBox || !selBox.active) { selBox = null; return }
@@ -301,6 +302,47 @@
       }
     } else if (probeHover) {
       probeHover = null
+    }
+
+    // Feature: Interactive Pin Hover Tooltip HUD (Live Pin Inspector)
+    if (!wireStart && !selBox?.active && !$showPowerFlow) {
+      const nearPin = nearestPin($components, w.x, w.y, 18)
+      if (nearPin && nearPin.pin) {
+        const p = nearPin.pin
+        const comp = nearPin.comp
+        const pType = (p.type || 'digital').toLowerCase()
+        const pLabel = p.label || nearPin.pinId
+        const connectedWire = $wires.find(
+          w => (w.fromComp === comp.instanceId && w.fromPin === nearPin.pinId) ||
+               (w.toComp === comp.instanceId && w.toPin === nearPin.pinId)
+        )
+
+        let voltTolerance = '3.3V Logic Safe'
+        if (/arduino-uno|arduino-nano|arduino-mega/i.test(comp.id)) {
+          voltTolerance = '5.0V Logic Tolerant'
+        } else if (pType === 'gnd') {
+          voltTolerance = '0V Reference Ground'
+        } else if (/vcc|5v|12v|vin/i.test(pLabel)) {
+          voltTolerance = 'Power Supply Rail'
+        }
+
+        pinHoverHud = {
+          screenX: e.clientX,
+          screenY: e.clientY,
+          compName: comp.label || comp.name || comp.id,
+          pinId: nearPin.pinId,
+          pinLabel: pLabel,
+          pinNum: p.num ? `GPIO${p.num}` : '',
+          pinType: pType,
+          tolerance: voltTolerance,
+          isConnected: !!connectedWire,
+          netLabel: connectedWire ? (connectedWire.label || connectedWire.color) : null
+        }
+      } else {
+        pinHoverHud = null
+      }
+    } else {
+      pinHoverHud = null
     }
   }
 
@@ -1187,6 +1229,34 @@
     </div>
   {/if}
 
+  <!-- Interactive Pin Hover Tooltip HUD (Live Pin Inspector) -->
+  {#if pinHoverHud}
+    <div class="pin-hover-hud" style="left: {pinHoverHud.screenX + 16}px; top: {pinHoverHud.screenY + 16}px;">
+      <div class="hud-top">
+        <span class="hud-comp">{pinHoverHud.compName}</span>
+        <span class="hud-type-badge type-{pinHoverHud.pinType}">{pinHoverHud.pinType.toUpperCase()}</span>
+      </div>
+      <div class="hud-pin-row">
+        <span class="hud-pin-name">{pinHoverHud.pinLabel}</span>
+        {#if pinHoverHud.pinNum}
+          <span class="hud-pin-num font-mono">{pinHoverHud.pinNum}</span>
+        {/if}
+      </div>
+      <div class="hud-sub-info">
+        <span class="hud-volt">{pinHoverHud.tolerance}</span>
+      </div>
+      <div class="hud-conn-row">
+        {#if pinHoverHud.isConnected}
+          <span class="hud-conn-dot dot-active"></span>
+          <span class="hud-conn-text">Terhubung: <strong>{pinHoverHud.netLabel}</strong></span>
+        {:else}
+          <span class="hud-conn-dot dot-float"></span>
+          <span class="hud-conn-text text-float">Floating (Belum terhubung)</span>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- Feature 7: Minimap -->
   {#if showMinimap}
     <Minimap {vx} {vy} {vscale} cw={canvasW} ch={canvasH} on:minipan={onMinipan}/>
@@ -1335,4 +1405,90 @@
     font-size: 9.5px;
     color: #94a3b8;
   }
+
+  /* ── Interactive Pin Hover Tooltip HUD ── */
+  .pin-hover-hud {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 10px rgba(56, 189, 248, 0.2);
+    min-width: 180px;
+    backdrop-filter: blur(8px);
+    animation: pop-probe 0.12s ease-out;
+  }
+  .hud-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 4px;
+  }
+  .hud-comp {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .hud-type-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    background: #1e293b;
+    color: #cbd5e1;
+  }
+  .hud-type-badge.type-power { background: #991b1b; color: #fca5a5; }
+  .hud-type-badge.type-gnd { background: #1e293b; color: #94a3b8; }
+  .hud-type-badge.type-i2c { background: #1e3a8a; color: #93c5fd; }
+  .hud-type-badge.type-spi { background: #4c1d95; color: #c4b5fd; }
+  .hud-type-badge.type-uart { background: #065f46; color: #6ee7b7; }
+  .hud-type-badge.type-analog { background: #713f12; color: #fde047; }
+  .hud-type-badge.type-pwm { background: #15803d; color: #86efac; }
+  .hud-pin-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .hud-pin-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #ffffff;
+  }
+  .hud-pin-num {
+    font-size: 11px;
+    color: #38bdf8;
+    font-weight: 600;
+  }
+  .hud-sub-info {
+    font-size: 10px;
+    color: #cbd5e1;
+  }
+  .hud-conn-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    margin-top: 2px;
+    padding-top: 4px;
+    border-top: 1px dashed #1e293b;
+  }
+  .hud-conn-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .dot-active { background: #22c55e; box-shadow: 0 0 5px #22c55e; }
+  .dot-float { background: #64748b; }
+  .hud-conn-text { color: #f1f5f9; }
+  .text-float { color: #94a3b8; font-style: italic; }
 </style>

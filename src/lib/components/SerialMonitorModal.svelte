@@ -31,7 +31,21 @@
   export let onClose = () => { isSerialMonitorOpen.set(false) }
 
   // ── Active Tab Selection ──────────────────────────────────────────────────
-  let activeTab = 'terminal' // 'terminal' | 'logic-analyzer'
+  let activeTab = 'terminal' // 'terminal' | 'logic-analyzer' | 'micropython'
+
+  // ── MicroPython Script State ──────────────────────────────────────────────
+  let pythonScript = `# MicroPython Hardware Test
+import machine, time
+
+# Inisialisasi LED internal atau GPIO2
+led = machine.Pin(2, machine.Pin.OUT)
+for i in range(5):
+    led.value(1)
+    time.sleep(0.2)
+    led.value(0)
+    time.sleep(0.2)
+print("Blink test complete! System OK.")
+`
 
   // ── Web Serial API (Physical Hardware Connection) ─────────────────────────
   let connectionMode = 'virtual' // 'virtual' | 'hardware'
@@ -150,6 +164,62 @@
       }
     } finally {
       try { serialReader.releaseLock() } catch {}
+    }
+  }
+
+  // ── MicroPython REPL Execution Control ───────────────────────────────────
+  async function sendRawByte(byteCode, label = '') {
+    if (label) appendSerialLog('tx', `[CTRL] ${label}`)
+    if (isHardwareConnected && serialPort && serialPort.writable) {
+      try {
+        const writer = serialPort.writable.getWriter()
+        await writer.write(new Uint8Array([byteCode]))
+        writer.releaseLock()
+      } catch (err) {
+        appendSerialLog('err', `[REPL] Gagal: ${err.message}`)
+      }
+    } else {
+      // Simulate MicroPython response in virtual mode
+      if (byteCode === 3) {
+        appendSerialLog('rx', 'Traceback (most recent call last):\r\nKeyboardInterrupt')
+        appendSerialLog('rx', '>>> ')
+      } else if (byteCode === 4) {
+        appendSerialLog('sys', 'MPY: soft reboot')
+        appendSerialLog('rx', 'MicroPython v1.22.0 on 2026-11-10; ESP32-S3 module with ESP32-S3\r\nType "help()" for more information.\r\n>>> ')
+      } else if (byteCode === 5) {
+        appendSerialLog('rx', 'paste mode; Ctrl-C to cancel, Ctrl-D to finish\r\n=== ')
+      }
+    }
+  }
+
+  async function runPythonScript() {
+    if (!pythonScript.trim()) return
+    appendSerialLog('sys', '[PYTHON] Mengirim script ke MicroPython REPL...')
+
+    if (isHardwareConnected && serialPort && serialPort.writable) {
+      try {
+        const encoder = new TextEncoder()
+        const writer = serialPort.writable.getWriter()
+        // Enter paste mode Ctrl+E
+        await writer.write(new Uint8Array([5]))
+        await new Promise(r => setTimeout(r, 120))
+        // Write script
+        await writer.write(encoder.encode(pythonScript + '\r\n'))
+        await new Promise(r => setTimeout(r, 120))
+        // Finish paste mode Ctrl+D
+        await writer.write(new Uint8Array([4]))
+        writer.releaseLock()
+        appendSerialLog('sys', '[PYTHON] Script selesai dikirim.')
+      } catch (err) {
+        appendSerialLog('err', `[PYTHON] Gagal mengirim script: ${err.message}`)
+      }
+    } else {
+      // Simulate running Python in virtual mode
+      setTimeout(() => {
+        appendSerialLog('rx', '=== paste mode: running script...')
+        appendSerialLog('rx', 'Blink test complete! System OK.')
+        appendSerialLog('rx', '>>> ')
+      }, 350)
     }
   }
 
@@ -396,6 +466,14 @@
         >
           <span>📈</span>
           <span>Logic Analyzer (4-CH)</span>
+        </button>
+        <button
+          class="sm-tab-btn"
+          class:active={activeTab === 'micropython'}
+          on:click={() => activeTab = 'micropython'}
+        >
+          <span>🐍</span>
+          <span>MicroPython REPL</span>
         </button>
       </div>
 
@@ -658,6 +736,74 @@
                 {/each}
               </g>
             </svg>
+          </div>
+        </div>
+      {:else if activeTab === 'micropython'}
+        <!-- ── TAB 3: MICROPYTHON REPL & SCRIPT RUNNER ── -->
+        <div class="sm-mpy-wrap">
+          <!-- MPY Action Ribbon -->
+          <div class="sm-mpy-toolbar">
+            <div class="sm-mpy-btn-group">
+              <span class="sm-mpy-lbl">Kontrol REPL:</span>
+              <button class="sm-ctrl-btn" on:click={() => sendRawByte(3, 'Ctrl+C (Interrupt)')} title="Hentikan script (KeyboardInterrupt)">
+                Ctrl+C ⏹
+              </button>
+              <button class="sm-ctrl-btn" on:click={() => sendRawByte(4, 'Ctrl+D (Soft Reboot)')} title="Soft reboot MicroPython">
+                Ctrl+D 🔄
+              </button>
+              <button class="sm-ctrl-btn" on:click={() => sendRawByte(5, 'Ctrl+E (Paste Mode)')} title="Masuk ke mode Paste">
+                Ctrl+E 📋
+              </button>
+            </div>
+
+            <div class="sm-mpy-btn-group">
+              <span class="sm-mpy-lbl">Makro Cepat:</span>
+              <button class="sm-macro-btn" on:click={() => sendCommand('import machine; machine.reset()')}>
+                Reset Chip
+              </button>
+              <button class="sm-macro-btn" on:click={() => sendCommand("help('modules')")}>
+                List Modul
+              </button>
+              <button class="sm-macro-btn" on:click={() => sendCommand('import gc; gc.collect(); print("RAM Free:", gc.mem_free())')}>
+                Cek RAM
+              </button>
+            </div>
+
+            <button class="sm-btn sm-btn-run" on:click={runPythonScript}>
+              <span>▶</span>
+              <span>Jalankan Script ke Board</span>
+            </button>
+          </div>
+
+          <!-- Split View: Script Editor (Top/Left) & Live REPL Terminal (Bottom/Right) -->
+          <div class="sm-mpy-split">
+            <div class="sm-mpy-editor-pane">
+              <div class="sm-pane-header">
+                <span class="sm-pane-title">📝 Editor Script MicroPython (main.py)</span>
+                <span class="sm-pane-tip">💡 Dikirim langsung via Raw Paste Mode</span>
+              </div>
+              <textarea
+                class="sm-python-editor font-mono"
+                bind:value={pythonScript}
+                placeholder="Tulis kode MicroPython di sini..."
+                spellcheck="false"
+              ></textarea>
+            </div>
+
+            <div class="sm-mpy-term-pane">
+              <div class="sm-pane-header">
+                <span class="sm-pane-title">📟 Live REPL Output Stream</span>
+                <button on:click={clearSerialLogs} class="sm-btn-mini">Bersihkan</button>
+              </div>
+              <div class="sm-logs-area font-mono" bind:this={terminalLogsContainer}>
+                {#each $serialLogs as log}
+                  <div class="sm-log-line sm-log-{log.type}">
+                    <span class="sm-log-type">{log.type.toUpperCase()}</span>
+                    <span class="sm-log-text">{log.text}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
           </div>
         </div>
       {/if}
@@ -1152,5 +1298,133 @@
     background: #050b14;
     border: 1px solid #1e293b;
     border-radius: 8px;
+  }
+
+  /* ── MicroPython REPL Viewport Layout ── */
+  .sm-mpy-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sm-mpy-toolbar {
+    padding: 8px 16px;
+    background: #090e1a;
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .sm-mpy-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sm-mpy-lbl {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+  .sm-ctrl-btn {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #f59e0b;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: monospace;
+    transition: all 0.15s;
+  }
+  .sm-ctrl-btn:hover {
+    background: #b45309;
+    color: #ffffff;
+    border-color: #f59e0b;
+  }
+  .sm-macro-btn {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #38bdf8;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .sm-macro-btn:hover {
+    background: #0284c7;
+    color: #ffffff;
+  }
+  .sm-btn-run {
+    margin-left: auto;
+    background: #16a34a;
+    border: 1px solid #22c55e;
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
+  }
+  .sm-btn-run:hover {
+    background: #15803d;
+  }
+  .sm-mpy-split {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+  .sm-mpy-editor-pane {
+    border-right: 1px solid #1e293b;
+    display: flex;
+    flex-direction: column;
+    background: #070b14;
+  }
+  .sm-mpy-term-pane {
+    display: flex;
+    flex-direction: column;
+    background: #040710;
+  }
+  .sm-pane-header {
+    padding: 6px 12px;
+    background: #0d1526;
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sm-pane-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #e2e8f0;
+  }
+  .sm-pane-tip {
+    font-size: 10px;
+    color: #64748b;
+  }
+  .sm-btn-mini {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #94a3b8;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .sm-btn-mini:hover {
+    background: #334155;
+    color: #fff;
+  }
+  .sm-python-editor {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #a5f3fc;
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 12px;
+    resize: none;
+    font-family: 'Fira Code', 'Consolas', monospace;
   }
 </style>

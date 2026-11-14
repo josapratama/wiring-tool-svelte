@@ -157,6 +157,12 @@
       <span class="pcb-btn-text">3D View</span>
     </button>
 
+    <!-- DIY Etching Mask Button -->
+    <button on:click={() => dispatch('open-etch')} class="pcb-btn pcb-btn-etch" title="Buka Studio Cetak Masker Sablon / Toner Transfer DIY 1:1">
+      <span>🖨️</span>
+      <span class="pcb-btn-text">DIY Etch</span>
+    </button>
+
     <!-- Rotate button -->
     <button on:click={() => dispatch('rotate-selected', 90)} class="pcb-btn" title="Putar Komponen Terpilih 90° (Shortcut: R)">
       <span>↻</span>

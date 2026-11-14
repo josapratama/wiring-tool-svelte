@@ -310,6 +310,14 @@
     }, 120)
   }
 
+  function triggerPcbEtch() {
+    if ($activeEditorView !== 'pcb') setActiveEditorView('pcb')
+    setTimeout(() => {
+      const etchBtn = document.querySelector('.pcb-btn-etch')
+      if (etchBtn) etchBtn.click()
+    }, 120)
+  }
+
   function openSimulatorLab() {
     try {
       const pinCode = generatePinCode($compsStore, $wiresStore, projectName)
@@ -478,6 +486,7 @@
     switch (type) {
       case 'pcb-export':
       case 'gerber-zip': triggerPcbExport(); break
+      case 'pcb-etch': triggerPcbEtch(); break
       case 'json': exportJSON(); break
       case 'svg': exportSVG(); break
       case 'png': exportPNG(); break
