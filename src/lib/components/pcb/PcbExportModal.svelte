@@ -40,9 +40,14 @@
             <p class="pcb-opt-desc">
               Arsip file lengkap (.GTL, .GBL, .GTS, .GBS, .GTO, .GBO, .DRL, .GKO) standar JLCPCB & PCBWay.
             </p>
-            <button on:click={() => selectExport('gerber-zip')} class="pcb-btn pcb-btn-pri pcb-opt-btn">
-              <span>Unduh Arsip Gerber RS-274X (.zip)</span>
-            </button>
+            <div class="pcb-export-btn-row">
+              <button on:click={() => selectExport('gerber-zip')} class="pcb-btn pcb-btn-pri pcb-opt-btn">
+                <span>Unduh Arsip Gerber (.zip)</span>
+              </button>
+              <button on:click={() => selectExport('inspect-gerber')} class="pcb-btn pcb-opt-btn" title="Lihat kode raw dan verifikasi 8 layer Gerber">
+                <span>🔍 Inspeksi Layer</span>
+              </button>
+            </div>
           </div>
         </div>
 

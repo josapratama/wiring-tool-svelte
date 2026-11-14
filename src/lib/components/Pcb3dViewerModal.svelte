@@ -148,6 +148,25 @@
         color: 0x020617,
         roughness: 0.1,
         metalness: 0.9
+      }),
+      servoBlue: new THREE.MeshStandardMaterial({
+        color: 0x0284c7,
+        roughness: 0.35,
+        metalness: 0.1
+      }),
+      relaySongle: new THREE.MeshStandardMaterial({
+        color: 0x1d4ed8,
+        roughness: 0.4,
+        metalness: 0.1
+      }),
+      hornWhite: new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        roughness: 0.3
+      }),
+      potMetal: new THREE.MeshStandardMaterial({
+        color: 0x94a3b8,
+        roughness: 0.2,
+        metalness: 0.85
       })
     }
   }
@@ -471,7 +490,87 @@
         stripe.position.set(-1.2, 0, 1.8)
         comp3d.add(stripe)
       }
-      // Model E: Generic IC DIP / SMD Package
+      // Model E: Micro Servo SG90
+      else if (id.includes('servo')) {
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(11.5, 22.5, 12),
+          materials.servoBlue
+        )
+        body.position.set(0, 0, 6)
+        comp3d.add(body)
+
+        const shaftTower = new THREE.Mesh(
+          new THREE.CylinderGeometry(2.5, 2.5, 4, 16),
+          materials.servoBlue
+        )
+        shaftTower.rotateX(Math.PI / 2)
+        shaftTower.position.set(0, 5, 14)
+        comp3d.add(shaftTower)
+
+        const horn = new THREE.Mesh(
+          new THREE.BoxGeometry(3.5, 18, 1.2),
+          materials.hornWhite
+        )
+        horn.position.set(0, 5, 16.5)
+        comp3d.add(horn)
+      }
+      // Model F: Rotary Potentiometer
+      else if (id.includes('potentiometer') || id.includes('potensio')) {
+        const potBody = new THREE.Mesh(
+          new THREE.CylinderGeometry(4.8, 4.8, 6.0, 24),
+          materials.icEpoxy
+        )
+        potBody.rotateX(Math.PI / 2)
+        potBody.position.set(0, 0, 3)
+        comp3d.add(potBody)
+
+        const shaft = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.5, 1.5, 8.0, 16),
+          materials.potMetal
+        )
+        shaft.rotateX(Math.PI / 2)
+        shaft.position.set(0, 0, 8.5)
+        comp3d.add(shaft)
+      }
+      // Model G: 5V Relay Module
+      else if (id.includes('relay')) {
+        const relayCube = new THREE.Mesh(
+          new THREE.BoxGeometry(15, 18, 14),
+          materials.relaySongle
+        )
+        relayCube.position.set(0, 0, 7)
+        comp3d.add(relayCube)
+
+        const lbl = new THREE.Mesh(
+          new THREE.PlaneGeometry(12, 14),
+          materials.silkscreen
+        )
+        lbl.position.set(0, 0, 14.1)
+        comp3d.add(lbl)
+      }
+      // Model H: NeoPixel WS2812B RGB
+      else if (id.includes('neopixel') || id.includes('ws2812')) {
+        const smdBase = new THREE.Mesh(
+          new THREE.BoxGeometry(5.0, 5.0, 1.6),
+          materials.hornWhite
+        )
+        smdBase.position.set(0, 0, 0.8)
+        comp3d.add(smdBase)
+
+        const lens = new THREE.Mesh(
+          new THREE.CylinderGeometry(2.0, 2.0, 0.3, 16),
+          new THREE.MeshStandardMaterial({
+            color: 0x38bdf8,
+            emissive: 0x06b6d4,
+            emissiveIntensity: 0.8,
+            roughness: 0.1
+          })
+        )
+        lens.rotateX(Math.PI / 2)
+        lens.position.set(0, 0, 1.7)
+        comp3d.add(lens)
+      }
+      // Model I: Generic IC DIP / SMD Package
       else {
         const pw = Math.max(8, (fp.widthMm || 12))
         const ph = Math.max(10, (fp.heightMm || 16))

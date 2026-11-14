@@ -89,6 +89,14 @@
       </div>
     </button>
 
+    <button class="dd-item" on:click={() => selectAction('kicad-sch')}>
+      <span class="dd-icon">🔷</span>
+      <div class="dd-info">
+        <span class="dd-label">KiCad Skematik (.kicad_sch)</span>
+        <span class="dd-desc">Buka langsung di KiCad Schematic Editor v6/v7/v8</span>
+      </div>
+    </button>
+
     <div class="dd-divider"></div>
 
     <button class="dd-item" on:click={() => selectAction('netlist')}>

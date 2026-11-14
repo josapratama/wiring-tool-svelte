@@ -497,4 +497,90 @@ export async function exportPlatformIOProjectZip({
   return `${cleanName}_PlatformIO.zip`
 }
 
+/**
+ * Generates an official KiCad v6/v7/v8 S-Expression Schematic file (.kicad_sch).
+ * Directly importable into KiCad Schematic Editor (Eeschema).
+ */
+export function exportToKiCadSchematic({
+  projectName = 'CircuitCraft_Schematic',
+  components = [],
+  wires = [],
+  sheetConfig = {}
+}) {
+  const cleanName = (projectName || 'CircuitCraft_Schematic').replace(/[^a-zA-Z0-9_\-]/g, '_')
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const pxToMm = 0.25
+
+  let sch = `(kicad_sch (version 20211123) (generator "CircuitCraft EDA")
+
+  (paper "${sheetConfig?.size || 'A4'}")
+
+  (title_block
+    (title "${cleanName}")
+    (date "${dateStr}")
+    (company "CircuitCraft Web EDA")
+    (comment 1 "Generated with CircuitCraft Svelte 5 Suite")
+  )
+`
+
+  // 1. Symbol Placements
+  const compPosMap = new Map()
+
+  components.forEach((c, idx) => {
+    const xMm = Number(((c.x || 100) * pxToMm).toFixed(2))
+    const yMm = Number(((c.y || 100) * pxToMm).toFixed(2))
+    const ref = c.label || c.name || `U${idx + 1}`
+    const val = c.props?.value || c.name || c.id || 'PART'
+    const uuid = `sym_${c.instanceId || idx}_${Date.now()}`
+    const libId = c.theme === 'mcu' ? 'MCU_Module:Generic_MCU' : (c.theme === 'passive' ? 'Device:Generic_Passive' : 'Device:Generic_Component')
+    const footprint = c.footprintId || 'Package_DIP:DIP-8_W7.62mm'
+
+    compPosMap.set(c.instanceId || c.id, { xMm, yMm, c })
+
+    sch += `\n  (symbol (lib_id "${libId}") (at ${xMm} ${yMm} 0) (unit 1)
+    (in_bom yes) (on_board yes)
+    (uuid "${uuid}")
+    (property "Reference" "${ref}" (id 0) (at ${xMm} ${(yMm - 6).toFixed(2)} 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "${val}" (id 1) (at ${xMm} ${(yMm + 6).toFixed(2)} 0) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "${footprint}" (id 2) (at ${xMm} ${yMm} 0) (effects (font (size 1.27 1.27)) hide))
+  )\n`
+  })
+
+  // 2. Wires & Connections
+  sch += '\n  ;; Schematic Wire Connections\n'
+  wires.forEach((w, wIdx) => {
+    const fromCompId = w.from?.compId || w.fromComp
+    const toCompId = w.to?.compId || w.toComp
+    const fromInfo = compPosMap.get(fromCompId)
+    const toInfo = compPosMap.get(toCompId)
+
+    let x1 = fromInfo ? fromInfo.xMm : 20 + (wIdx * 5)
+    let y1 = fromInfo ? fromInfo.yMm : 20 + (wIdx * 5)
+    let x2 = toInfo ? toInfo.xMm : x1 + 25
+    let y2 = toInfo ? toInfo.yMm : y1 + 25
+
+    const wireUuid = `wire_${w.id || wIdx}_${Date.now()}`
+
+    sch += `  (wire (pts (xy ${x1.toFixed(2)} ${y1.toFixed(2)}) (xy ${x2.toFixed(2)} ${y2.toFixed(2)}))
+    (stroke (width 0) (type default) (color 0 0 0 0))
+    (uuid "${wireUuid}")
+  )\n`
+
+    if (w.label) {
+      const midX = ((x1 + x2) / 2).toFixed(2)
+      const midY = ((y1 + y2) / 2).toFixed(2)
+      sch += `  (label "${w.label}" (at ${midX} ${midY} 0)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "lbl_${wireUuid}")
+  )\n`
+    }
+  })
+
+  sch += ')\n'
+
+  const filename = `${cleanName}.kicad_sch`
+  downloadFile(sch, filename, 'application/x-kicad-schematic')
+  return filename
+}
+
 

@@ -29,7 +29,8 @@
     generateShareLink,
     downloadFile,
     exportFabricationDocPack,
-    exportPlatformIOProjectZip
+    exportPlatformIOProjectZip,
+    exportToKiCadSchematic
   } from '$lib/services/export-service.js'
 
   import { showAlert, showConfirm } from '$lib/store/dialog.js'
@@ -334,6 +335,21 @@
     }
   }
 
+  function handleExportKiCadSchematic() {
+    try {
+      const filename = exportToKiCadSchematic({
+        projectName,
+        components: $compsStore,
+        wires: $wiresStore,
+        sheetConfig: $sheetConfig
+      })
+      flash(`🔷 File KiCad Skematik berhasil diunduh: ${filename} ✓`)
+    } catch (err) {
+      console.error('Failed to export KiCad Schematic:', err)
+      showAlert({ title: 'Gagal Ekspor KiCad', message: err.message })
+    }
+  }
+
   function handleExportDocPack() {
     exportFabricationDocPack({
       projectName,
@@ -363,6 +379,8 @@
       case 'export-doc-pack': handleExportDocPack(); break
       case 'export-platformio':
       case 'platformio-zip': handleExportPlatformIO(); break
+      case 'kicad-sch':
+      case 'export-kicad-sch': handleExportKiCadSchematic(); break
       case 'open-custom-comp': showCustomCompModal = true; break
       case 'open-bom':
       case 'export-bom': exportBOM(); break
@@ -443,6 +461,8 @@
       case 'doc-pack': handleExportDocPack(); break
       case 'platformio-zip':
       case 'platformio': handleExportPlatformIO(); break
+      case 'kicad-sch':
+      case 'export-kicad-sch': handleExportKiCadSchematic(); break
       case 'wokwi': showWokwiModal = true; break
       case 'share':
       case 'share-link': shareDiagramLink(); break

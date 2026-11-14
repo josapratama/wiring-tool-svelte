@@ -32,6 +32,18 @@
 
   $: currentComponents = components || $componentsStore
 
+  function getWireVoltageEstimate(w, fc, tc) {
+    const fPin = (w.fromPin || '').toUpperCase()
+    const tPin = (w.toPin || '').toUpperCase()
+    const lbl = (w.label || '').toUpperCase()
+
+    if (fPin.includes('12V') || tPin.includes('12V') || lbl.includes('12V')) return { v: '⚡ +12.0V', color: '#c084fc', bg: '#3b0764' }
+    if (fPin.includes('5V') || tPin.includes('5V') || lbl.includes('5V')) return { v: '⚡ +5.0V', color: '#f87171', bg: '#450a0a' }
+    if (fPin.includes('3V3') || tPin.includes('3V3') || fPin.includes('3.3') || tPin.includes('3.3') || lbl.includes('3.3') || lbl.includes('3V3')) return { v: '⚡ +3.3V', color: '#fbbf24', bg: '#451a03' }
+    if (fPin === 'GND' || tPin === 'GND' || lbl === 'GND' || fPin === '-' || tPin === '-') return { v: '⏚ 0.0V (GND)', color: '#38bdf8', bg: '#082f49' }
+    return null
+  }
+
   $: normalWires = (() => {
     const cs = currentComponents
     const ws = $wires
@@ -47,7 +59,8 @@
       const { d, pts } = routeWire(p1, p2, i, w.routingMode || rm, w.userOffset || 0)
       const mid  = pathMidpoint(pts)
       const lpos = labelPos(pts)
-      return { d, pts, p1, p2, mid, lpos, wire: w }
+      const volt = getWireVoltageEstimate(w, fc, tc)
+      return { d, pts, p1, p2, mid, lpos, wire: w, volt }
     }).filter(Boolean)
   })()
 
@@ -244,6 +257,37 @@
       fill={col} style="font:700 11px 'Consolas',monospace">{wire.label}</text>
   </g>
 {/each}
+
+<!-- Live Power Flow & Voltage Probe Telemetry Badges -->
+{#if $showPowerFlow}
+  {#each normalWires as { wire, mid, volt } (wire.id)}
+    {#if volt && mid}
+      <g pointer-events="none" class="voltage-probe-badge">
+        <rect
+          x={mid.x - 36}
+          y={mid.y - 10}
+          width="72"
+          height="20"
+          rx="5"
+          fill={volt.bg}
+          stroke={volt.color}
+          stroke-width="1.2"
+          filter="drop-shadow(0 2px 4px rgba(0,0,0,0.5))"
+        />
+        <text
+          x={mid.x}
+          y={mid.y + 1}
+          dominant-baseline="central"
+          text-anchor="middle"
+          fill={volt.color}
+          style="font: 700 10.5px monospace; letter-spacing: -0.2px;"
+        >
+          {volt.v}
+        </text>
+      </g>
+    {/if}
+  {/each}
+{/if}
 
 <!-- Wire Crossing Bridge Hops (IEEE Standard 4-Way Jumps) -->
 {#each wireCrossings as cr (cr.id)}

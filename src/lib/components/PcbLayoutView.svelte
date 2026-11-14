@@ -52,6 +52,7 @@
   import PcbRibbon from './pcb/PcbRibbon.svelte'
   import PcbInspector from './pcb/PcbInspector.svelte'
   import PcbExportModal from './pcb/PcbExportModal.svelte'
+  import GerberInspectorModal from './pcb/GerberInspectorModal.svelte'
   import JSZip from 'jszip'
 
   const dispatch = createEventDispatcher()
@@ -117,12 +118,18 @@
   function handleExportModalAction(e) {
     const type = e.detail
     if (type === 'gerber-zip') triggerGerberDownload()
+    else if (type === 'inspect-gerber') triggerGerberInspection()
     else if (type === 'kicad-pcb') triggerKiCadExport()
     else if (type === 'easyeda-json') triggerEasyEdaExport()
     else if (type === 'svg-top') triggerEtchingSvgExport('top', false)
     else if (type === 'svg-bottom') triggerEtchingSvgExport('bottom', false)
     else if (type === 'cpl-csv') triggerCplExport()
     else if (type === 'enclosure-stl') triggerEnclosureStlExport()
+  }
+
+  function triggerGerberInspection() {
+    inspectedGerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias)
+    showGerberInspector = true
   }
 
   function triggerKiCadExport() {
@@ -158,6 +165,8 @@
   // ── Inspector & Modal State ─────────────────────────────────────────────────
   let showInspector = true
   let showExportModal = false
+  let showGerberInspector = false
+  let inspectedGerbers = {}
   let exportSuccessMsg = ''
 
   // ── Synchronize Components from Schematic ───────────────────────────────────
@@ -1422,6 +1431,16 @@
   <PcbExportModal
     bind:show={showExportModal}
     on:export={handleExportModalAction}
+  />
+
+  <!-- 4. Gerber Layer Raw Inspector Modal -->
+  <GerberInspectorModal
+    bind:show={showGerberInspector}
+    gerbers={inspectedGerbers}
+    {boardWidthMm}
+    {boardHeightMm}
+    on:download-zip={triggerGerberDownload}
+    on:flash={e => exportSuccessMsg = e.detail}
   />
 
 </div>
