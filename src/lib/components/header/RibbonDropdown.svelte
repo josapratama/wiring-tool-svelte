@@ -101,6 +101,9 @@
       <button class="rdd-item" on:click={() => triggerAction('open-custom-comp')}>
         <span class="rdd-icon">🛠️</span> Buat Komponen Kustom (EELib)
       </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-snippets')}>
+        <span class="rdd-icon">🧩</span> Pustaka Sub-Sirkuit (Snippets)
+      </button>
 
     {:else if activeMenu === 'view'}
       <button class="rdd-item" on:click={() => triggerAction('toggle-left-sidebar')}>
@@ -141,6 +144,9 @@
       </button>
       <button class="rdd-item" on:click={() => triggerAction('open-oscilloscope')}>
         <span class="rdd-icon">📊</span> Oskiloskop Virtual 2-Kanal (Analog)
+      </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-calc')}>
+        <span class="rdd-icon">🧮</span> Kalkulator Elektronika & IPC-2152
       </button>
 
     {:else if activeMenu === 'help'}

@@ -46,7 +46,7 @@
     generateGerberRS274X, exportToEasyEDAJson, generateDiyEtchingSvg,
     autoRoutePcbNets, generateCopperPourSvgPath, estimatePcbBOMCost,
     generatePcbTeardrops, generatePickAndPlaceCplCsv, generateEnclosureStl,
-    generateThermalReliefs, buildPcbNetlist, getCompPadAliases
+    generateThermalReliefs, buildPcbNetlist, getCompPadAliases, exportToKiCadPcb
   } from '$lib/engine/pcb-engine.js'
 
   import PcbRibbon from './pcb/PcbRibbon.svelte'
@@ -117,11 +117,18 @@
   function handleExportModalAction(e) {
     const type = e.detail
     if (type === 'gerber-zip') triggerGerberDownload()
+    else if (type === 'kicad-pcb') triggerKiCadExport()
     else if (type === 'easyeda-json') triggerEasyEdaExport()
     else if (type === 'svg-top') triggerEtchingSvgExport('top', false)
     else if (type === 'svg-bottom') triggerEtchingSvgExport('bottom', false)
     else if (type === 'cpl-csv') triggerCplExport()
     else if (type === 'enclosure-stl') triggerEnclosureStlExport()
+  }
+
+  function triggerKiCadExport() {
+    const kicadStr = exportToKiCadPcb({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias, { cornerRadiusMm })
+    downloadFile(`CircuitCraft_${boardWidthMm}x${boardHeightMm}mm.kicad_pcb`, kicadStr, 'application/x-kicad-pcb')
+    exportSuccessMsg = 'File KiCad PCB (.kicad_pcb) berhasil diunduh! Siap dibuka langsung di KiCad PCB Editor.'
   }
 
   function triggerCplExport() {
@@ -485,6 +492,40 @@
     }
     return closest
   }
+
+  // ── Real-Time Interactive DRC Clearance Violation Monitor ───────────────────
+  $: routingDrcConflict = (() => {
+    if (!routingStart || !routingCurrent) return false
+    const currX = routingCurrent.xMm
+    const currY = routingCurrent.yMm
+    const safeClearance = 0.25 // mm
+    const currentRadius = (activeTraceWidth / 2)
+
+    for (const comp of pcbComponents) {
+      const fp = comp.footprint || getFootprintForComponent(comp)
+      if (!fp || !fp.pads) continue
+      const rot = comp.rotation || 0
+      const rad = (rot * Math.PI) / 180
+      const cosR = Math.cos(rad)
+      const sinR = Math.sin(rad)
+
+      for (let idx = 0; idx < fp.pads.length; idx++) {
+        const pad = fp.pads[idx]
+        const padNet = getPadNetId(comp, pad, idx)
+        if (routingStart.netId && padNet && padNet === routingStart.netId) continue
+
+        const wx = comp.xMm + (pad.x * cosR - pad.y * sinR)
+        const wy = comp.yMm + (pad.x * sinR + pad.y * cosR)
+        const padRadius = (pad.sizeMm || 1.6) / 2
+        const d = Math.hypot(currX - wx, currY - wy)
+
+        if (d < padRadius + currentRadius + safeClearance) {
+          return true
+        }
+      }
+    }
+    return false
+  })()
 
   // ── Interactive Copper Trace Routing ────────────────────────────────────────
   function handlePadClick(e, comp, pad, padXmm, padYmm, padIndex = 0) {
@@ -1020,16 +1061,37 @@
             {/each}
           </g>
 
-          <!-- F. Active In-Progress Routing Line -->
+          <!-- F. Active In-Progress Routing Line with Real-time DRC Clearance Halo -->
           {#if routingStart && routingCurrent}
             <line
               x1={routingStart.xMm} y1={routingStart.yMm} x2={routingCurrent.xMm} y2={routingCurrent.yMm}
-              stroke={activeLayer === 'top' ? '#f43f5e' : '#38bdf8'}
+              stroke={routingDrcConflict ? '#ef4444' : (activeLayer === 'top' ? '#f43f5e' : '#38bdf8')}
               stroke-width={activeTraceWidth}
               stroke-dasharray="0.6, 0.4"
               stroke-linecap="round"
               pointer-events="none"
             />
+
+            <!-- Real-time DRC Clearance Halo around Active Routing Cursor -->
+            <g class="routing-halo" pointer-events="none">
+              <!-- Outer Clearance Ring (0.25mm safety buffer) -->
+              <circle
+                cx={routingCurrent.xMm}
+                cy={routingCurrent.yMm}
+                r={(activeTraceWidth / 2) + 0.25}
+                fill={routingDrcConflict ? 'rgba(239, 68, 68, 0.35)' : 'rgba(56, 189, 248, 0.18)'}
+                stroke={routingDrcConflict ? '#ef4444' : '#38bdf8'}
+                stroke-width="0.08"
+                stroke-dasharray="0.3, 0.2"
+              />
+              <!-- Center Wire Point -->
+              <circle
+                cx={routingCurrent.xMm}
+                cy={routingCurrent.yMm}
+                r={activeTraceWidth / 2}
+                fill={routingDrcConflict ? '#ef4444' : (activeLayer === 'top' ? '#f43f5e' : '#38bdf8')}
+              />
+            </g>
           {/if}
 
           <!-- F. Component Footprints (Silkscreen + Through-hole / SMD Pads) -->
@@ -1285,14 +1347,16 @@
         <button on:click={resetView} class="pcb-link-btn">Reset</button>
       </div>
 
-      <!-- Bottom-Center Routing Guide Hint -->
+      <!-- Bottom-Center Routing Guide Hint with Real-time DRC Status -->
       {#if activeTool === 'route'}
         <div class="pcb-hud pcb-hud-center">
-          <span class="pcb-route-tip">
-            {#if !routingStart}
+          <span class="pcb-route-tip" class:pcb-route-warn={routingDrcConflict}>
+            {#if routingDrcConflict}
+              ⚠️ <strong>Pelanggaran Clearance DRC (&lt;0.25mm)</strong>: Posisi kursor terlalu dekat dengan pad/net lain!
+            {:else if !routingStart}
               ⚡ Klik pad komponen untuk mulai menarik jalur tembaga
             {:else}
-              📍 Klik titik belokan (45°) atau klik pad target untuk menyelesaikan
+              📍 Klik titik belokan (45°) atau klik pad target untuk menyelesaikan (Halo DRC Aman ✓)
             {/if}
           </span>
         </div>
@@ -1448,6 +1512,11 @@
     color: #ffffff;
     font-weight: 600;
     box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  }
+
+  .pcb-route-warn {
+    color: #fca5a5 !important;
+    text-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
   }
 
   .pcb-hud-top-right {

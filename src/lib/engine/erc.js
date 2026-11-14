@@ -56,7 +56,9 @@ export const COMPONENT_CURRENT_RATINGS = [
   { pattern: /dht/i,           name: 'Sensor DHT',           peakMa: 2.5, idleMa: 0.1, voltage: 3.3 },
   { pattern: /mpu/i,           name: 'Sensor IMU (MPU6050)', peakMa: 4,   idleMa: 0.5, voltage: 3.3 },
   { pattern: /bmp|bme/i,       name: 'Sensor Barometer',     peakMa: 3,   idleMa: 0.2, voltage: 3.3 },
-  { pattern: /led/i,           name: 'LED Indikator',        peakMa: 15,  idleMa: 0,   voltage: 3.3 }
+  { pattern: /led/i,           name: 'LED Indikator',        peakMa: 15,  idleMa: 0,   voltage: 3.3 },
+  { pattern: /l298n|motor\s*driver/i, name: 'Driver Motor L298N', peakMa: 1200, idleMa: 35, voltage: 12.0 },
+  { pattern: /potentiometer|potensio/i, name: 'Potensiometer 10k', peakMa: 0.5, idleMa: 0.5, voltage: 3.3 }
 ]
 
 export function calculatePowerBudget(components = []) {

@@ -163,6 +163,11 @@
         ⚡ <span class="btn-text">Sim</span>
       </button>
 
+      <!-- Sub-Circuit Snippets button -->
+      <button class="btn btn-sim" on:click={() => dispatch('open-snippets')} title="Pustaka Blok Sub-Sirkuit Siap Pakai">
+        🧩 <span class="btn-text">Snippets</span>
+      </button>
+
       <!-- Virtual Serial Monitor button -->
       <button class="btn btn-serial" on:click={() => dispatch('open-serial')} title="Buka Virtual Serial Terminal & 4-CH Logic Analyzer">
         📟 <span class="btn-text">Serial</span>
@@ -174,6 +179,11 @@
         <span class="badge-erc badge-erc-ok">✓ CAD</span>
       </button>
     {/if}
+
+    <!-- Electronics Engineering Calculator button -->
+    <button class="btn btn-calc" on:click={() => dispatch('open-calc')} title="Kalkulator Teknik Elektronika (LED, Divider, IPC-2152)">
+      🧮 <span class="btn-text">Calc</span>
+    </button>
 
     <!-- Export Dropdown -->
     <div class="dropdown-wrap">
@@ -385,6 +395,8 @@
 
   .btn-sim { background: #0e3a53; color: #38bdf8; border: 1px solid #0284c7; }
   .btn-sim:hover { background: #0284c7; color: #fff; box-shadow: 0 0 12px rgba(56, 189, 248, 0.4); }
+  .btn-calc { background: #3b0764; color: #c084fc; border: 1px solid #7e22ce; }
+  .btn-calc:hover { background: #6b21a8; color: #fff; box-shadow: 0 0 12px rgba(192, 132, 252, 0.4); }
   .flash { font-size: 11.5px; color: #4ade80; font-weight: 600; white-space: nowrap; }
 
   .dropdown-wrap { position: relative; }

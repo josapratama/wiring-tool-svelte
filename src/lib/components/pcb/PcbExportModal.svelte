@@ -46,7 +46,21 @@
           </div>
         </div>
 
-        <!-- Option 2: EasyEDA PCB -->
+        <!-- Option 2: KiCad PCB (v6/v7/v8) -->
+        <div class="pcb-export-option pcb-export-option-pri">
+          <div class="pcb-opt-icon">🔷</div>
+          <div class="pcb-opt-content">
+            <h4 class="pcb-opt-title">KiCad PCB Document (.kicad_pcb)</h4>
+            <p class="pcb-opt-desc">
+              Format native KiCad v6 / v7 / v8 S-Expression. Langsung buka di KiCad PCB Editor desktop dengan layer, pad, via, dan netlist lengkap!
+            </p>
+            <button on:click={() => selectExport('kicad-pcb')} class="pcb-btn pcb-btn-pri pcb-opt-btn">
+              <span>Unduh KiCad PCB (.kicad_pcb)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Option 3: EasyEDA PCB -->
         <div class="pcb-export-option">
           <div class="pcb-opt-icon">⚡</div>
           <div class="pcb-opt-content">

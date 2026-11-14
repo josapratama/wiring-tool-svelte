@@ -315,6 +315,63 @@ export const STANDARD_FOOTPRINTS = {
       { type: "rect", x: -11.0, y: -6.0, w: 22.0, h: 14.0, r: 0.5, desc: "Screen" },
       { type: "text", text: "SSD1306 OLED", x: 0, y: 11.0, size: 1.8 }
     ]
+  },
+  "POTENTIOMETER-3P": {
+    package: "POT_ROTARY_D9.5_P2.54",
+    desc: "Rotary Potentiometer 3-Pin (2.54mm pitch)",
+    widthMm: 11.0,
+    heightMm: 11.0,
+    pads: [
+      { num: "1", name: "1", x: -2.54, y: 3.5, sizeMm: 1.8, drillMm: 1.0, shape: "rect" },
+      { num: "2", name: "2", x: 0, y: 3.5, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "3", name: "3", x: 2.54, y: 3.5, sizeMm: 1.8, drillMm: 1.0, shape: "round" }
+    ],
+    silkscreen: [
+      { type: "circle", cx: 0, cy: -0.5, r: 4.8 },
+      { type: "text", text: "POT 10K", x: 0, y: -1.0, size: 1.6 }
+    ]
+  },
+  "NEOPIXEL-4P": {
+    package: "NEOPIXEL-4P-2.54MM",
+    desc: "WS2812B NeoPixel RGB Header (4-Pin)",
+    widthMm: 10.16,
+    heightMm: 3.0,
+    pads: [
+      { num: "1", name: "DIN", x: -3.81, y: 0, sizeMm: 1.7, drillMm: 1.0, shape: "rect" },
+      { num: "2", name: "5V", x: -1.27, y: 0, sizeMm: 1.7, drillMm: 1.0, shape: "round" },
+      { num: "3", name: "DOUT", x: 1.27, y: 0, sizeMm: 1.7, drillMm: 1.0, shape: "round" },
+      { num: "4", name: "GND", x: 3.81, y: 0, sizeMm: 1.7, drillMm: 1.0, shape: "round" }
+    ],
+    silkscreen: [
+      { type: "rect", x: -5.08, y: -1.27, w: 10.16, h: 2.54, r: 0.2 },
+      { type: "text", text: "RGB", x: 0, y: 2.5, size: 1.4 }
+    ]
+  },
+  "L298N-MODULE": {
+    package: "L298N-DUAL-HBRIDGE",
+    desc: "L298N Dual Motor Driver Module",
+    widthMm: 43.0,
+    heightMm: 43.0,
+    pads: [
+      { num: "1", name: "VMS", x: -18.0, y: -12.0, sizeMm: 2.2, drillMm: 1.2, shape: "rect" },
+      { num: "2", name: "GND", x: -18.0, y: -7.0, sizeMm: 2.2, drillMm: 1.2, shape: "round" },
+      { num: "3", name: "5V", x: -18.0, y: -2.0, sizeMm: 2.2, drillMm: 1.2, shape: "round" },
+      { num: "4", name: "ENA", x: -18.0, y: 3.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "5", name: "ENB", x: -18.0, y: 8.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "6", name: "IN1", x: -7.62, y: 18.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "7", name: "IN2", x: -2.54, y: 18.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "8", name: "IN3", x: 2.54, y: 18.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "9", name: "IN4", x: 7.62, y: 18.0, sizeMm: 1.8, drillMm: 1.0, shape: "round" },
+      { num: "10", name: "OUT1", x: 18.0, y: -7.5, sizeMm: 2.2, drillMm: 1.2, shape: "round" },
+      { num: "11", name: "OUT2", x: 18.0, y: -2.5, sizeMm: 2.2, drillMm: 1.2, shape: "round" },
+      { num: "12", name: "OUT3", x: 18.0, y: 2.5, sizeMm: 2.2, drillMm: 1.2, shape: "round" },
+      { num: "13", name: "OUT4", x: 18.0, y: 7.5, sizeMm: 2.2, drillMm: 1.2, shape: "round" }
+    ],
+    silkscreen: [
+      { type: "rect", x: -21.5, y: -21.5, w: 43.0, h: 43.0, r: 2.0 },
+      { type: "rect", x: -10.0, y: -10.0, w: 20.0, h: 20.0, r: 0.5, desc: "Heatsink" },
+      { type: "text", text: "L298N DRIVER", x: 0, y: 0, size: 2.4 }
+    ]
   }
 };
 
@@ -388,6 +445,15 @@ export function getFootprintForComponent(comp) {
   }
   if (id.includes("capacitor")) {
     return STANDARD_FOOTPRINTS["CAPACITOR-TH"];
+  }
+  if (id.includes("potentiometer") || id.includes("potensio")) {
+    return STANDARD_FOOTPRINTS["POTENTIOMETER-3P"];
+  }
+  if (id.includes("l298n") || id.includes("motor-driver")) {
+    return STANDARD_FOOTPRINTS["L298N-MODULE"];
+  }
+  if (id.includes("neopixel") || id.includes("ws2812")) {
+    return STANDARD_FOOTPRINTS["NEOPIXEL-4P"];
   }
   if (theme === "sensor" || id.includes("sensor")) {
     return STANDARD_FOOTPRINTS["HEADER-1X4"];
@@ -1667,4 +1733,133 @@ export function generateEnclosureStl(board, options = {}) {
   stl += 'endsolid circuit_craft_enclosure\r\n';
 
   return stl;
+}
+
+/**
+ * Generates an official KiCad v6/v7/v8 S-Expression PCB file (.kicad_pcb).
+ * Directly importable into KiCad PCB Editor.
+ */
+export function exportToKiCadPcb(board, pcbComponents = [], copperTraces = [], vias = [], boardConfig = {}) {
+  const widthMm = Number(board?.widthMm || 100);
+  const heightMm = Number(board?.heightMm || 80);
+  const now = Math.floor(Date.now() / 1000);
+
+  // 1. Build distinct net mapping from wires / traces
+  const netMap = new Map();
+  netMap.set("", 0);
+  let netCounter = 1;
+
+  for (const t of copperTraces) {
+    if (t.netId && !netMap.has(t.netId)) {
+      netMap.set(t.netId, netCounter++);
+    }
+  }
+
+  let kicad = `(kicad_pcb (version 20211014) (generator "CircuitCraft EDA")
+
+  (general
+    (thickness 1.6)
+  )
+
+  (paper "A4")
+
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (34 "B.Paste" user)
+    (35 "F.Paste" user)
+    (36 "B.SilkS" user "B.Silkscreen")
+    (37 "F.SilkS" user "F.Silkscreen")
+    (38 "B.Mask" user "B.Soldermask")
+    (39 "F.Mask" user "F.Soldermask")
+    (44 "Edge.Cuts" user)
+    (46 "B.CrtYd" user "B.Courtyard")
+    (47 "F.CrtYd" user "F.Courtyard")
+  )
+
+  (setup
+    (pad_to_mask_clearance 0.1)
+    (pcbplotparams
+      (layerselection 0x00010fc_ffffffff)
+      (plot_on_all_layers_selection 0x0000000_00000000)
+      (usegerberextensions true)
+      (usegerberattributes true)
+    )
+  )
+`;
+
+  // Netlist definitions
+  for (const [netName, netIdx] of netMap.entries()) {
+    kicad += `  (net ${netIdx} "${netName}")\n`;
+  }
+  kicad += '\n';
+
+  // Board outline (Edge.Cuts)
+  const r = boardConfig?.cornerRadiusMm || 0;
+  if (r > 0) {
+    kicad += `  (gr_line (start ${r} 0) (end ${widthMm - r} 0) (layer "Edge.Cuts") (width 0.15))\n`;
+    kicad += `  (gr_line (start ${widthMm} ${r}) (end ${widthMm} ${heightMm - r}) (layer "Edge.Cuts") (width 0.15))\n`;
+    kicad += `  (gr_line (start ${widthMm - r} ${heightMm}) (end ${r} ${heightMm}) (layer "Edge.Cuts") (width 0.15))\n`;
+    kicad += `  (gr_line (start 0 ${heightMm - r}) (end 0 ${r}) (layer "Edge.Cuts") (width 0.15))\n`;
+  } else {
+    kicad += `  (gr_line (start 0 0) (end ${widthMm} 0) (layer "Edge.Cuts") (width 0.15))\n`;
+    kicad += `  (gr_line (start ${widthMm} 0) (end ${widthMm} ${heightMm}) (layer "Edge.Cuts") (width 0.15))\n`;
+    kicad += `  (gr_line (start ${widthMm} ${heightMm}) (end 0 ${heightMm}) (layer "Edge.Cuts") (width 0.15))\n`;
+    kicad += `  (gr_line (start 0 ${heightMm}) (end 0 0) (layer "Edge.Cuts") (width 0.15))\n`;
+  }
+
+  // Footprints placement
+  for (const c of pcbComponents) {
+    const fp = c.footprint || getFootprintForComponent(c);
+    const rot = c.rotation || 0;
+    const ref = c.label || c.id || "U";
+    const val = c.name || fp.package || "PART";
+    const compId = c.instanceId || `comp_${Math.random().toString(36).substr(2, 6)}`;
+
+    kicad += `\n  (footprint "${fp.package || 'Custom_Footprint'}" (layer "F.Cu")\n`;
+    kicad += `    (tstamp "${compId}")\n`;
+    kicad += `    (at ${c.xMm.toFixed(3)} ${c.yMm.toFixed(3)} ${rot})\n`;
+    kicad += `    (property "Reference" "${ref}" (at 0 -${((fp.heightMm || 10) / 2 + 2).toFixed(2)} 0) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))\n`;
+    kicad += `    (property "Value" "${val}" (at 0 ${((fp.heightMm || 10) / 2 + 2).toFixed(2)} 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))\n`;
+
+    const halfW = (fp.widthMm || 10) / 2;
+    const halfH = (fp.heightMm || 10) / 2;
+    kicad += `    (fp_rect (start -${halfW.toFixed(2)} -${halfH.toFixed(2)}) (end ${halfW.toFixed(2)} ${halfH.toFixed(2)}) (layer "F.SilkS") (width 0.15))\n`;
+
+    if (fp.pads && Array.isArray(fp.pads)) {
+      fp.pads.forEach((p, pIdx) => {
+        const padNum = p.num || String(pIdx + 1);
+        const padShape = p.shape === 'rect' ? 'rect' : 'circle';
+        const pSize = p.sizeMm || 1.8;
+        const pDrill = p.drillMm || 1.0;
+        const pNetName = p.netId || "";
+        const pNetIdx = netMap.get(pNetName) || 0;
+
+        kicad += `    (pad "${padNum}" thru_hole ${padShape} (at ${p.x.toFixed(3)} ${p.y.toFixed(3)}) (size ${pSize} ${pSize}) (drill ${pDrill}) (layers *.Cu *.Mask) (net ${pNetIdx} "${pNetName}"))\n`;
+      });
+    }
+
+    kicad += `  )\n`;
+  }
+
+  // Copper Traces (Segments)
+  kicad += '\n  ;; Copper Traces\n';
+  copperTraces.forEach((t, idx) => {
+    const layer = t.layer === 'bottom' ? 'B.Cu' : 'F.Cu';
+    const width = t.widthMm || 0.4;
+    const netIdx = netMap.get(t.netId || "") || 0;
+    kicad += `  (segment (start ${t.x1Mm.toFixed(3)} ${t.y1Mm.toFixed(3)}) (end ${t.x2Mm.toFixed(3)} ${t.y2Mm.toFixed(3)}) (width ${width}) (layer "${layer}") (net ${netIdx}) (tstamp "trace_${idx}_${now}"))\n`;
+  });
+
+  // Vias
+  kicad += '\n  ;; Through-Hole Vias\n';
+  vias.forEach((v, idx) => {
+    const size = v.outerMm || 0.8;
+    const drill = v.drillMm || 0.45;
+    const netIdx = netMap.get(v.netId || "") || 0;
+    kicad += `  (via (at ${v.xMm.toFixed(3)} ${v.yMm.toFixed(3)}) (size ${size}) (drill ${drill}) (layers "F.Cu" "B.Cu") (net ${netIdx}) (tstamp "via_${idx}_${now}"))\n`;
+  });
+
+  kicad += ')\n';
+  return kicad;
 }

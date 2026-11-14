@@ -20,6 +20,8 @@
   import VersionHistoryModal from '$lib/components/modals/VersionHistoryModal.svelte'
   import OscilloscopeModal from '$lib/components/modals/OscilloscopeModal.svelte'
   import CustomComponentModal from '$lib/components/CustomComponentModal.svelte'
+  import EngineeringCalcModal from '$lib/components/modals/EngineeringCalcModal.svelte'
+  import CircuitSnippetsModal from '$lib/components/modals/CircuitSnippetsModal.svelte'
   import {
     exportDiagramSvg,
     exportDiagramPng,
@@ -45,7 +47,7 @@
     removeWire, removeLabel,
     getAutoSave, clearAutoSave, initAutoSave,
     renderMode, toggleRenderMode, activeEditorView, setActiveEditorView,
-    is3dViewerOpen, isSerialMonitorOpen
+    is3dViewerOpen, isSerialMonitorOpen, addComponent, addWire
   } from '$lib/store/diagram.js'
   import { runERC }      from '$lib/engine/erc.js'
   import { generatePinCode } from '$lib/engine/codegen.js'
@@ -69,6 +71,8 @@
   let showSnapshotModal = false
   let showCustomCompModal = false
   let showScopeModal = false
+  let showCalcModal = false
+  let showSnippetsModal = false
 
   // Layout sidebars & status flash
   let showLeftSidebar = true
@@ -155,6 +159,45 @@
     isLightMode = !isLightMode
     try { localStorage.setItem('wiretool_theme', isLightMode ? 'light' : 'dark') } catch {}
     flash(isLightMode ? '☀️ Light Mode diaktifkan' : '🌙 Dark Mode diaktifkan')
+  }
+
+  function insertCircuitSnippet(snippet) {
+    if (!snippet || !snippet.components) return
+    const baseX = 240 + Math.floor(Math.random() * 50)
+    const baseY = 180 + Math.floor(Math.random() * 50)
+    const idMap = new Map()
+
+    snippet.components.forEach((cDef, idx) => {
+      const newInstId = `snp_${Date.now()}_${idx}`
+      idMap.set(idx, newInstId)
+      addComponent({
+        ...cDef,
+        instanceId: newInstId,
+        x: baseX + (cDef.dx || 0),
+        y: baseY + (cDef.dy || 0)
+      })
+    })
+
+    if (snippet.wires && Array.isArray(snippet.wires)) {
+      snippet.wires.forEach((wDef, wIdx) => {
+        const fromCompId = idMap.get(wDef.fromIdx)
+        const toCompId = idMap.get(wDef.toIdx)
+        if (fromCompId && toCompId) {
+          addWire({
+            id: `w_snp_${Date.now()}_${wIdx}`,
+            fromComp: fromCompId,
+            fromPin: wDef.fromPin,
+            toComp: toCompId,
+            toPin: wDef.toPin,
+            color: wDef.color || '#38bdf8',
+            label: wDef.label || ''
+          })
+        }
+      })
+    }
+
+    pushHistory(`Insert Snippet: ${snippet.name}`)
+    flash(`Sub-Sirkuit "${snippet.name}" berhasil disisipkan ke diagram ✓`)
   }
 
   // Reactive ERC analysis
@@ -369,6 +412,8 @@
       case 'open-serial':
       case 'open-serial-monitor': isSerialMonitorOpen.set(true); break
       case 'open-oscilloscope': showScopeModal = true; break
+      case 'open-calc': showCalcModal = true; break
+      case 'open-snippets': showSnippetsModal = true; break
       case 'pcb-inspector':
       case 'open-pcb-inspector': triggerPcbInspector(); break
       case 'shortcuts':
@@ -633,6 +678,8 @@
     on:open-codegen={() => showCodeGenModal = true}
     on:open-simulator={openSimulatorLab}
     on:open-serial={() => isSerialMonitorOpen.set(true)}
+    on:open-calc={() => showCalcModal = true}
+    on:open-snippets={() => showSnippetsModal = true}
     on:open-pcb-inspector={triggerPcbInspector}
   />
 
@@ -780,6 +827,15 @@
 
   <!-- ⚡ 2-Channel Virtual Oscilloscope Modal -->
   <OscilloscopeModal bind:show={showScopeModal} />
+
+  <!-- 🧮 Interactive Electronics Engineering Calculator Modal -->
+  <EngineeringCalcModal bind:show={showCalcModal} />
+
+  <!-- 🧩 Reusable Sub-Circuit Modular Snippets Modal -->
+  <CircuitSnippetsModal
+    bind:show={showSnippetsModal}
+    on:insert-snippet={e => insertCircuitSnippet(e.detail)}
+  />
 </div>
 
 <style>
