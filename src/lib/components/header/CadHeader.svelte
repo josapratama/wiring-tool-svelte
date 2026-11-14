@@ -185,6 +185,11 @@
       🧮 <span class="btn-text">Calc</span>
     </button>
 
+    <!-- MCU Pinout Cheat Sheet button -->
+    <button class="btn btn-pinout" on:click={() => dispatch('open-pinout')} title="Panduan Pinout & GPIO Cheat Sheet MCU">
+      📌 <span class="btn-text">Pinout</span>
+    </button>
+
     <!-- Export Dropdown -->
     <div class="dropdown-wrap">
       <button class="btn btn-pri" on:click={toggleExport} title="Export diagram & fabrikasi">
@@ -397,6 +402,8 @@
   .btn-sim:hover { background: #0284c7; color: #fff; box-shadow: 0 0 12px rgba(56, 189, 248, 0.4); }
   .btn-calc { background: #3b0764; color: #c084fc; border: 1px solid #7e22ce; }
   .btn-calc:hover { background: #6b21a8; color: #fff; box-shadow: 0 0 12px rgba(192, 132, 252, 0.4); }
+  .btn-pinout { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
+  .btn-pinout:hover { background: #059669; color: #fff; box-shadow: 0 0 12px rgba(110, 231, 183, 0.4); }
   .flash { font-size: 11.5px; color: #4ade80; font-weight: 600; white-space: nowrap; }
 
   .dropdown-wrap { position: relative; }

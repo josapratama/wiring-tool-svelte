@@ -22,6 +22,7 @@
   import CustomComponentModal from '$lib/components/CustomComponentModal.svelte'
   import EngineeringCalcModal from '$lib/components/modals/EngineeringCalcModal.svelte'
   import CircuitSnippetsModal from '$lib/components/modals/CircuitSnippetsModal.svelte'
+  import PinoutCheatSheetModal from '$lib/components/modals/PinoutCheatSheetModal.svelte'
   import {
     exportDiagramSvg,
     exportDiagramPng,
@@ -30,7 +31,8 @@
     downloadFile,
     exportFabricationDocPack,
     exportPlatformIOProjectZip,
-    exportToKiCadSchematic
+    exportToKiCadSchematic,
+    exportMarkdownWiringGuide
   } from '$lib/services/export-service.js'
 
   import { showAlert, showConfirm } from '$lib/store/dialog.js'
@@ -74,6 +76,7 @@
   let showScopeModal = false
   let showCalcModal = false
   let showSnippetsModal = false
+  let showPinoutModal = false
 
   // Layout sidebars & status flash
   let showLeftSidebar = true
@@ -350,6 +353,20 @@
     }
   }
 
+  function handleExportMarkdownGuide() {
+    try {
+      const filename = exportMarkdownWiringGuide({
+        projectName,
+        components: $compsStore,
+        wires: $wiresStore
+      })
+      flash(`📝 Panduan pengkabelan Markdown diunduh: ${filename} ✓`)
+    } catch (err) {
+      console.error('Failed to export Markdown guide:', err)
+      showAlert({ title: 'Gagal Ekspor Markdown', message: err.message })
+    }
+  }
+
   function handleExportDocPack() {
     exportFabricationDocPack({
       projectName,
@@ -381,6 +398,9 @@
       case 'platformio-zip': handleExportPlatformIO(); break
       case 'kicad-sch':
       case 'export-kicad-sch': handleExportKiCadSchematic(); break
+      case 'markdown-guide':
+      case 'export-markdown-guide': handleExportMarkdownGuide(); break
+      case 'open-pinout': showPinoutModal = true; break
       case 'open-custom-comp': showCustomCompModal = true; break
       case 'open-bom':
       case 'export-bom': exportBOM(); break
@@ -463,6 +483,8 @@
       case 'platformio': handleExportPlatformIO(); break
       case 'kicad-sch':
       case 'export-kicad-sch': handleExportKiCadSchematic(); break
+      case 'markdown-guide':
+      case 'export-markdown-guide': handleExportMarkdownGuide(); break
       case 'wokwi': showWokwiModal = true; break
       case 'share':
       case 'share-link': shareDiagramLink(); break
@@ -700,6 +722,7 @@
     on:open-serial={() => isSerialMonitorOpen.set(true)}
     on:open-calc={() => showCalcModal = true}
     on:open-snippets={() => showSnippetsModal = true}
+    on:open-pinout={() => showPinoutModal = true}
     on:open-pcb-inspector={triggerPcbInspector}
   />
 
@@ -856,6 +879,9 @@
     bind:show={showSnippetsModal}
     on:insert-snippet={e => insertCircuitSnippet(e.detail)}
   />
+
+  <!-- 📌 Interactive MCU Pinout & GPIO Cheat Sheet Modal -->
+  <PinoutCheatSheetModal bind:show={showPinoutModal} />
 </div>
 
 <style>

@@ -15,6 +15,7 @@
 
   let activeTab = 'eelib' // 'eelib' | 'manager'
   let searchQ = ''
+  let activeCatFilter = 'all' // 'all' | 'mcu' | 'sensors' | 'output' | 'display' | 'power' | 'passive'
   let collapsed = {}
   let customComponents = []
   let showModal = false
@@ -117,13 +118,27 @@
       placeholder={activeTab === 'eelib' ? "Cari komponen..." : "Cari part atau net..."}
       aria-label="Search items"
     />
+    {#if activeTab === 'eelib'}
+      <div class="cat-filter-pills">
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'all'} on:click={() => activeCatFilter = 'all'}>Semua</button>
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'mcu'} on:click={() => activeCatFilter = 'mcu'}>🧠 MCU</button>
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'sensors'} on:click={() => activeCatFilter = 'sensors'}>🎛️ Sensor</button>
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'output'} on:click={() => activeCatFilter = 'output'}>🔊 Output</button>
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'display'} on:click={() => activeCatFilter = 'display'}>🖥️ Display</button>
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'power'} on:click={() => activeCatFilter = 'power'}>⚡ Daya</button>
+        <button class="cat-pill" class:pill-active={activeCatFilter === 'passive'} on:click={() => activeCatFilter = 'passive'}>🏷️ Pasif</button>
+        {#if customComponents.length > 0}
+          <button class="cat-pill" class:pill-active={activeCatFilter === 'custom'} on:click={() => activeCatFilter = 'custom'}>⭐ Custom</button>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div class="library">
     {#if activeTab === 'eelib'}
       <!-- TAB 1: EELib COMPONENT LIBRARY -->
       <!-- Custom Components Section -->
-      {#if customComponents.length > 0}
+      {#if customComponents.length > 0 && (activeCatFilter === 'all' || activeCatFilter === 'custom')}
         {@const filteredCustom = filtered(customComponents)}
         {#if filteredCustom.length > 0}
           <div class="category">
@@ -165,17 +180,18 @@
 
       <!-- Standard Categories -->
       {#each CATEGORIES as cat (cat.id)}
-        {@const items = filtered(cat.items)}
-        {#if items.length > 0}
-          <div class="category">
-            <!-- svelte-ignore a11y-click-events-have-key-events -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="cat-header" on:click={() => toggle(cat.id)}>
-              <span class="cat-icon-badge">{cat.icon}</span>
-              <span class="cat-title">{cat.label}</span>
-              <span class="cat-count">({items.length})</span>
-              <span class="arrow" class:collapsed={collapsed[cat.id]}>▾</span>
-            </div>
+        {#if activeCatFilter === 'all' || activeCatFilter === cat.id}
+          {@const items = filtered(cat.items)}
+          {#if items.length > 0}
+            <div class="category">
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <!-- svelte-ignore a11y-no-static-element-interactions -->
+              <div class="cat-header" on:click={() => toggle(cat.id)}>
+                <span class="cat-icon-badge">{cat.icon}</span>
+                <span class="cat-title">{cat.label}</span>
+                <span class="cat-count">({items.length})</span>
+                <span class="arrow" class:collapsed={collapsed[cat.id]}>▾</span>
+              </div>
 
             {#if !collapsed[cat.id]}
               <div class="items">
@@ -208,6 +224,7 @@
             {/if}
           </div>
         {/if}
+      {/if}
       {/each}
     {:else}
       <!-- TAB 2: DESIGN MANAGER (PARTS & NETS TREE) -->
@@ -365,6 +382,23 @@
   .search:focus { border-color: #38bdf8; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
   .search::placeholder { color: #6b7280; }
 
+  /* Category filter pills */
+  .cat-filter-pills {
+    display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .cat-filter-pills::-webkit-scrollbar { display: none; }
+  .cat-pill {
+    background: #1e293b; border: 1px solid #334155; border-radius: 999px;
+    color: #94a3b8; font-size: 10px; font-weight: 600; padding: 2px 7px;
+    white-space: nowrap; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  }
+  .cat-pill:hover { background: #334155; color: #f8fafc; }
+  .cat-pill.pill-active {
+    background: #0284c7; border-color: #38bdf8; color: #ffffff;
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
+  }
+
   .library { flex: 1; overflow-y: auto; padding: 8px 6px; }
   .library::-webkit-scrollbar { width: 4px; }
   .library::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
@@ -521,6 +555,15 @@
   }
   :global(.light-app) .search::placeholder {
     color: #94a3b8;
+  }
+  :global(.light-app) .cat-pill {
+    background: #f1f5f9; border-color: #cbd5e1; color: #64748b;
+  }
+  :global(.light-app) .cat-pill:hover {
+    background: #e2e8f0; color: #0f172a;
+  }
+  :global(.light-app) .cat-pill.pill-active {
+    background: #0284c7; border-color: #0284c7; color: #ffffff;
   }
   :global(.light-app) .cat-header {
     color: #475569;

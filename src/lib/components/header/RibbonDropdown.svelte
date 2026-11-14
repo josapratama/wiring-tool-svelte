@@ -39,6 +39,9 @@
       <button class="rdd-item" on:click={() => triggerAction('export-netlist')}>
         <span class="rdd-icon">🔌</span> Ekspor Netlist (CSV)
       </button>
+      <button class="rdd-item" on:click={() => triggerAction('markdown-guide')}>
+        <span class="rdd-icon">📝</span> Panduan Pengkabelan (Markdown)
+      </button>
       <button class="rdd-item" on:click={() => triggerAction('open-bom')}>
         <span class="rdd-icon">📋</span> Maker BOM & Biaya Fabrikasi
       </button>
@@ -152,6 +155,9 @@
     {:else if activeMenu === 'help'}
       <button class="rdd-item" on:click={() => triggerAction('open-help')}>
         <span class="rdd-icon">❓</span> Daftar Pintasan Keyboard <span class="rdd-key">?</span>
+      </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-pinout')}>
+        <span class="rdd-icon">📌</span> Panduan Pinout & GPIO MCU
       </button>
       <button class="rdd-item" on:click={() => triggerAction('open-stats')}>
         <span class="rdd-icon">📊</span> Statistik Komponen & Diagram

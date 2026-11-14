@@ -583,4 +583,69 @@ export function exportToKiCadSchematic({
   return filename
 }
 
+/**
+ * Generates a comprehensive GitHub-ready Markdown Wiring Guide & Project Documentation (README.md).
+ */
+export function exportMarkdownWiringGuide({
+  projectName = 'CircuitCraft_Design',
+  components = [],
+  wires = []
+}) {
+  const cleanName = (projectName || 'CircuitCraft_Design').replace(/[^a-zA-Z0-9_\-]/g, '_')
+  const dateStr = new Date().toLocaleDateString('id-ID', {
+    day: '2-digit', month: 'long', year: 'numeric'
+  })
+
+  let md = `# ⚡ ${projectName} — Wiring Guide & Hardware Documentation\n\n`
+  md += `> **Tanggal Desain:** ${dateStr}  \n`
+  md += `> **Generator:** CircuitCraft Professional Web EDA Suite  \n`
+  md += `> **Total Komponen:** ${components.length} unit | **Total Koneksi Kabel:** ${wires.length} jalur\n\n`
+
+  md += `## 📋 1. Bill of Materials (Daftar Komponen)\n\n`
+  md += `| No | Komponen | Label / Ref | Package / Footprint | Keterangan |\n`
+  md += `|:--:|:---------|:-----------:|:-------------------:|:-----------|\n`
+
+  components.forEach((c, idx) => {
+    const name = c.name || c.id || 'Component'
+    const ref = c.label || c.id || `U${idx + 1}`
+    const fp = c.footprintId || 'DIP / THT Module'
+    const desc = c.desc || (c.props?.value ? `Nilai: ${c.props.value}` : '-')
+    md += `| ${idx + 1} | **${name}** | \`${ref}\` | ${fp} | ${desc} |\n`
+  })
+
+  md += `\n## 🔌 2. Panduan Pengkabelan (Pin-to-Pin Connection Guide)\n\n`
+  md += `Ikuti tabel interkoneksi di bawah ini untuk merangkai modul pada breadboard atau PCB:\n\n`
+  md += `| No | Dari Komponen | Pin Asal | Menuju Komponen | Pin Tujuan | Net / Fungsi | Warna Kabel |\n`
+  md += `|:--:|:--------------|:--------:|:----------------|:----------:|:------------:|:-----------:|\n`
+
+  const compLabelMap = new Map()
+  components.forEach(c => compLabelMap.set(c.instanceId, c.label || c.name || c.id))
+
+  wires.forEach((w, idx) => {
+    const fromCompId = w.from?.compId || w.fromComp
+    const toCompId = w.to?.compId || w.toComp
+    const fromLabel = compLabelMap.get(fromCompId) || fromCompId || 'Comp A'
+    const toLabel = compLabelMap.get(toCompId) || toCompId || 'Comp B'
+    const fromPin = w.from?.pinId || w.fromPin || '-'
+    const toPin = w.to?.pinId || w.toPin || '-'
+    const netName = w.label || (w.color === '#ef4444' ? 'VCC' : w.color === '#38bdf8' ? 'GND' : 'Signal')
+    const color = w.color || '#38bdf8'
+
+    md += `| ${idx + 1} | **${fromLabel}** | \`${fromPin}\` | **${toLabel}** | \`${toPin}\` | \`${netName}\` | \`${color}\` |\n`
+  })
+
+  md += `\n## ⚡ 3. Petunjuk Catu Daya & Keselamatan Listrik\n\n`
+  md += `- Pastikan seluruh pin **GND (Ground)** dari mikrokontroler dan seluruh modul sensor/aktuator terhubung menjadi satu (*Common Ground*).\n`
+  md += `- Untuk modul aktuator berdaya tinggi (seperti Motor Servo SG90, Driver Motor L298N, atau Relai 5V), disarankan menggunakan catu daya eksternal (External 5V/12V Power Supply) terpisah dan tidak mengambil arus langsung dari pin 5V mikrokontroler agar chip tidak mengalami restart/brownout.\n`
+
+  md += `\n## 💻 4. Panduan Firmware & Upload\n\n`
+  md += `Proyek ini kompatibel langsung dengan PlatformIO dan Arduino IDE.\n\n`
+  md += `\`\`\`bash\n# Kompilasi dan upload firmware via PlatformIO CLI\npio run --target upload\n\n# Membuka Serial Monitor (115200 baud)\npio device monitor -b 115200\n\`\`\`\n\n`
+  md += `---\n*Dokumentasi ini dibuat otomatis oleh [CircuitCraft EDA](https://github.com).* \n`
+
+  const filename = `${cleanName}_Wiring_Guide.md`
+  downloadFile(md, filename, 'text/markdown;charset=utf-8')
+  return filename
+}
+
 

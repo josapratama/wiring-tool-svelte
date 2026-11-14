@@ -97,6 +97,14 @@
       </div>
     </button>
 
+    <button class="dd-item" on:click={() => selectAction('markdown-guide')}>
+      <span class="dd-icon">📝</span>
+      <div class="dd-info">
+        <span class="dd-label">Panduan Pengkabelan (Markdown .md)</span>
+        <span class="dd-desc">Tabel Pin-to-Pin, BOM & Dokumentasi GitHub</span>
+      </div>
+    </button>
+
     <div class="dd-divider"></div>
 
     <button class="dd-item" on:click={() => selectAction('netlist')}>

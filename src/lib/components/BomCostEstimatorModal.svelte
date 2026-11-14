@@ -39,7 +39,12 @@
     relay: { footprint: 'RELAY-5V-SPDT', lcsc: 'C37592', priceUsd: 0.45, desc: 'Songle 5V Miniature Relay' },
     optocoupler: { footprint: 'DIP-4', lcsc: 'C3182', priceUsd: 0.08, desc: 'PC817 Optocoupler Isolator' },
     regulator: { footprint: 'TO-220', lcsc: 'C3472', priceUsd: 0.22, desc: 'LM7805 5V 1.5A Voltage Regulator' },
-    buck_converter: { footprint: 'MODULE-LM2596', lcsc: 'C48291', priceUsd: 0.75, desc: 'LM2596 DC-DC Step Down Module' }
+    buck_converter: { footprint: 'MODULE-LM2596', lcsc: 'C48291', priceUsd: 0.75, desc: 'LM2596 DC-DC Step Down Module' },
+    servo: { footprint: 'HDR-1X3', lcsc: 'C15124', priceUsd: 1.20, desc: 'TowerPro SG90 9g Micro Servo' },
+    potentiometer: { footprint: 'POT-ROTARY-9MM', lcsc: 'C25877', priceUsd: 0.18, desc: '10k Rotary Potentiometer ADC' },
+    neopixel: { footprint: 'SMD-5050', lcsc: 'C114587', priceUsd: 0.09, desc: 'WS2812B Addressable RGB LED' },
+    motor_driver: { footprint: 'MODULE-L298N', lcsc: 'C78291', priceUsd: 1.85, desc: 'L298N Dual H-Bridge Motor Driver' },
+    ultrasonic: { footprint: 'MODULE-HCSR04', lcsc: 'C41295', priceUsd: 0.95, desc: 'HC-SR04 Ultrasonic Distance Sensor' }
   }
 
   // ── Reactive BOM Generation ──
@@ -69,6 +74,11 @@
     if (name.includes('opto') || name.includes('pc817')) return 'optocoupler'
     if (name.includes('lm2596') || name.includes('buck') || name.includes('step-down')) return 'buck_converter'
     if (name.includes('7805') || name.includes('regulator')) return 'regulator'
+    if (name.includes('servo')) return 'servo'
+    if (name.includes('potentiometer') || name.includes('potensio')) return 'potentiometer'
+    if (name.includes('neopixel') || name.includes('ws2812')) return 'neopixel'
+    if (name.includes('l298n') || name.includes('motor')) return 'motor_driver'
+    if (name.includes('hcsr04') || name.includes('ultrasonic') || name.includes('sonar')) return 'ultrasonic'
     return 'sensor'
   }
 
