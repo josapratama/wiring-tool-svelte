@@ -52,6 +52,7 @@
   import PcbRibbon from './pcb/PcbRibbon.svelte'
   import PcbInspector from './pcb/PcbInspector.svelte'
   import PcbExportModal from './pcb/PcbExportModal.svelte'
+  import JSZip from 'jszip'
 
   const dispatch = createEventDispatcher()
 
@@ -675,12 +676,31 @@
   }
 
   // ── Gerber & Export Triggers ────────────────────────────────────────────────
-  function triggerGerberDownload() {
-    const gerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias)
-    for (const [filename, content] of Object.entries(gerbers)) {
-      downloadFile(filename, content, "text/plain")
+  async function triggerGerberDownload() {
+    try {
+      const gerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias)
+      const zip = new JSZip()
+      for (const [filename, content] of Object.entries(gerbers)) {
+        zip.file(filename, content)
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Gerber_RS274X_${boardWidthMm}x${boardHeightMm}mm.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      exportSuccessMsg = "Gerber RS-274X (8 Layers + Drill) berhasil dipaket ke ZIP! Siap langsung diupload ke JLCPCB / PCBWay."
+    } catch (err) {
+      console.error('Gerber ZIP export fallback:', err)
+      const gerbers = generateGerberRS274X({ widthMm: boardWidthMm, heightMm: boardHeightMm }, pcbComponents, copperTraces, vias)
+      for (const [filename, content] of Object.entries(gerbers)) {
+        downloadFile(filename, content, "text/plain")
+      }
+      exportSuccessMsg = "Gerber RS-274X berhasil di-generate! File siap dikirim ke JLCPCB / PCBWay."
     }
-    exportSuccessMsg = "Gerber RS-274X berhasil di-generate! File siap dikirim ke JLCPCB / PCBWay."
   }
 
   function triggerEasyEdaExport() {

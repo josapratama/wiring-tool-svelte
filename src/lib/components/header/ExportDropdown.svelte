@@ -81,6 +81,14 @@
       </div>
     </button>
 
+    <button class="dd-item" on:click={() => selectAction('platformio-zip')}>
+      <span class="dd-icon">⚡</span>
+      <div class="dd-info">
+        <span class="dd-label">Paket Proyek PlatformIO (.ZIP)</span>
+        <span class="dd-desc">platformio.ini + main.cpp + lib_deps siap flash</span>
+      </div>
+    </button>
+
     <div class="dd-divider"></div>
 
     <button class="dd-item" on:click={() => selectAction('netlist')}>

@@ -26,7 +26,8 @@
     exportNetlistCsv,
     generateShareLink,
     downloadFile,
-    exportFabricationDocPack
+    exportFabricationDocPack,
+    exportPlatformIOProjectZip
   } from '$lib/services/export-service.js'
 
   import { showAlert, showConfirm } from '$lib/store/dialog.js'
@@ -275,6 +276,21 @@
     flash('⚡ Membuka Virtual MCU Simulator Lab...')
   }
 
+  async function handleExportPlatformIO() {
+    try {
+      flash('Sedang memaketkan proyek PlatformIO...')
+      const filename = await exportPlatformIOProjectZip({
+        projectName,
+        components: $compsStore,
+        wires: $wiresStore
+      })
+      flash(`📦 Proyek PlatformIO berhasil diunduh: ${filename} ✓`)
+    } catch (err) {
+      console.error('Failed to export PlatformIO:', err)
+      showAlert('Gagal Ekspor', 'Terjadi kesalahan saat memaketkan proyek PlatformIO: ' + err.message)
+    }
+  }
+
   function handleExportDocPack() {
     exportFabricationDocPack({
       projectName,
@@ -302,6 +318,8 @@
       case 'save-json': exportJSON(); break
       case 'open-snapshots': showSnapshotModal = true; break
       case 'export-doc-pack': handleExportDocPack(); break
+      case 'export-platformio':
+      case 'platformio-zip': handleExportPlatformIO(); break
       case 'open-custom-comp': showCustomCompModal = true; break
       case 'open-bom':
       case 'export-bom': exportBOM(); break
@@ -378,6 +396,8 @@
       case 'netlist': exportNetlist(); break
       case 'bom': exportBOM(); break
       case 'doc-pack': handleExportDocPack(); break
+      case 'platformio-zip':
+      case 'platformio': handleExportPlatformIO(); break
       case 'wokwi': showWokwiModal = true; break
       case 'share':
       case 'share-link': shareDiagramLink(); break

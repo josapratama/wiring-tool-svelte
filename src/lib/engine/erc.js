@@ -22,6 +22,90 @@ const POWER_IDENTIFIERS = {
   '+': 5
 }
 
+// Known default 7-bit I2C device addresses
+export const I2C_DEVICE_PROFILES = {
+  'oled-ssd1306': { addr: '0x3C', alt: '0x3D', name: 'OLED SSD1306' },
+  'lcd-16x2':     { addr: '0x27', alt: '0x3F', name: 'LCD 16x2 I2C Backpack' },
+  'mpu-6050':     { addr: '0x68', alt: '0x69', name: 'MPU-6050 6-DOF IMU' },
+  'bmp280':       { addr: '0x76', alt: '0x77', name: 'BMP280 Barometer' },
+  'bme280':       { addr: '0x76', alt: '0x77', name: 'BME280 Temp/Humid/Press' },
+  'ads1115':      { addr: '0x48', alt: '0x49 - 0x4B', name: 'ADS1115 16-bit ADC' },
+  'ds3231':       { addr: '0x68', alt: null, name: 'DS3231 High-Precision RTC' },
+  'bh1750':       { addr: '0x23', alt: '0x5C', name: 'BH1750 Ambient Light' },
+  'ina219':       { addr: '0x40', alt: '0x41 - 0x45', name: 'INA219 Current/Power Monitor' },
+  'mcp23017':     { addr: '0x20', alt: '0x21 - 0x27', name: 'MCP23017 16-bit I/O Expander' },
+  'aht10':        { addr: '0x38', alt: null, name: 'AHT10 / AHT20 Temp & Humidity' }
+}
+
+// Estimated current draw ratings (mA) for power budget calculations
+export const COMPONENT_CURRENT_RATINGS = [
+  { pattern: /esp32s3/i,       name: 'ESP32-S3 DevKit',      peakMa: 260, idleMa: 80,  voltage: 3.3 },
+  { pattern: /esp32/i,         name: 'ESP32 DevKit',         peakMa: 240, idleMa: 75,  voltage: 3.3 },
+  { pattern: /uno/i,           name: 'Arduino Uno R3',       peakMa: 60,  idleMa: 45,  voltage: 5.0 },
+  { pattern: /nano/i,          name: 'Arduino Nano',         peakMa: 55,  idleMa: 40,  voltage: 5.0 },
+  { pattern: /mega/i,          name: 'Arduino Mega 2560',    peakMa: 80,  idleMa: 65,  voltage: 5.0 },
+  { pattern: /rpi4|pi\s*4/i,   name: 'Raspberry Pi 4',       peakMa: 1200,idleMa: 600, voltage: 5.0 },
+  { pattern: /pico|rp2040/i,   name: 'Raspberry Pi Pico',    peakMa: 50,  idleMa: 25,  voltage: 3.3 },
+  { pattern: /ssd1306|oled/i,  name: 'OLED SSD1306 128x64',  peakMa: 25,  idleMa: 10,  voltage: 3.3 },
+  { pattern: /lcd/i,           name: 'LCD 16x2 Backlight',   peakMa: 35,  idleMa: 15,  voltage: 5.0 },
+  { pattern: /relay/i,         name: 'Modul Relai 5V',       peakMa: 75,  idleMa: 5,   voltage: 5.0 },
+  { pattern: /servo/i,         name: 'Micro Servo (SG90)',   peakMa: 550, idleMa: 15,  voltage: 5.0 },
+  { pattern: /buzzer|piezo/i,  name: 'Piezo Buzzer',         peakMa: 30,  idleMa: 0,   voltage: 5.0 },
+  { pattern: /hcsr04|ultrasonic/i, name: 'Sensor Ultrasonik HC-SR04', peakMa: 15, idleMa: 2, voltage: 5.0 },
+  { pattern: /neopixel|ws2812/i, name: 'WS2812B RGB LED',    peakMa: 60,  idleMa: 1,   voltage: 5.0 },
+  { pattern: /dht/i,           name: 'Sensor DHT',           peakMa: 2.5, idleMa: 0.1, voltage: 3.3 },
+  { pattern: /mpu/i,           name: 'Sensor IMU (MPU6050)', peakMa: 4,   idleMa: 0.5, voltage: 3.3 },
+  { pattern: /bmp|bme/i,       name: 'Sensor Barometer',     peakMa: 3,   idleMa: 0.2, voltage: 3.3 },
+  { pattern: /led/i,           name: 'LED Indikator',        peakMa: 15,  idleMa: 0,   voltage: 3.3 }
+]
+
+export function calculatePowerBudget(components = []) {
+  let totalPeakMa = 0
+  let totalIdleMa = 0
+  const breakdown = []
+
+  components.forEach(c => {
+    if (c.theme === 'passive' && !c.id?.includes('led')) return
+    const id = (c.id || '').toLowerCase()
+    const name = (c.name || '').toLowerCase()
+    const target = id + ' ' + name
+
+    const rating = COMPONENT_CURRENT_RATINGS.find(r => r.pattern.test(target))
+    if (rating) {
+      totalPeakMa += rating.peakMa
+      totalIdleMa += rating.idleMa
+      breakdown.push({
+        label: c.label || c.id,
+        name: rating.name,
+        peakMa: rating.peakMa,
+        idleMa: rating.idleMa,
+        voltage: rating.voltage
+      })
+    }
+  })
+
+  const limitMa = 500 // Standar port USB 2.0 / LDO DevKit
+  let status = 'ok'
+  let warningMessage = null
+
+  if (totalPeakMa > 800) {
+    status = 'danger'
+    warningMessage = `Arus puncak rangkaian (${Math.round(totalPeakMa)} mA) sangat tinggi! Regulator LDO onboard akan mengalami panas berlebih (thermal throttling) dan mikrokontroler rentan restart. Wajib gunakan catu daya eksternal (External 5V/12V Power Supply).`
+  } else if (totalPeakMa > limitMa) {
+    status = 'warning'
+    warningMessage = `Arus puncak rangkaian (${Math.round(totalPeakMa)} mA) melebihi batas aman port USB 2.0 standar (${limitMa} mA). Disarankan menyalakan modul daya eksternal terutama saat WiFi atau motor/relai aktif.`
+  }
+
+  return {
+    totalPeakMa: Math.round(totalPeakMa),
+    totalIdleMa: Math.round(totalIdleMa),
+    limitMa,
+    status,
+    warningMessage,
+    breakdown
+  }
+}
+
 export function normalizePin(comp, pinId) {
   if (!comp) return null
   let pin = null
@@ -310,6 +394,106 @@ export function runERC(components = [], wires = []) {
     }
   })
 
+  // 3. I2C Bus Address Collision Checks
+  // Build net clusters for SDA and SCL pins
+  const sdaNets = []
+  const sclNets = []
+
+  function findOrAddToNet(nets, pA, pB) {
+    let found = nets.find(net => net.has(pA) || net.has(pB))
+    if (!found) {
+      found = new Set()
+      nets.push(found)
+    }
+    found.add(pA)
+    found.add(pB)
+  }
+
+  wires.forEach(w => {
+    const fc = compMap.get(w.fromComp)
+    const tc = compMap.get(w.toComp)
+    if (!fc || !tc) return
+
+    const p1 = normalizePin(fc, w.fromPin)
+    const p2 = normalizePin(tc, w.toPin)
+    if (!p1 || !p2) return
+
+    const l1 = (p1.label || p1.id || '').toUpperCase()
+    const l2 = (p2.label || p2.id || '').toUpperCase()
+
+    if (l1.includes('SDA') || l2.includes('SDA')) {
+      findOrAddToNet(sdaNets, `${w.fromComp}`, `${w.toComp}`)
+    }
+    if (l1.includes('SCL') || l2.includes('SCL')) {
+      findOrAddToNet(sclNets, `${w.fromComp}`, `${w.toComp}`)
+    }
+  })
+
+  // Merge overlapping nets
+  function mergeNets(nets) {
+    let merged = true
+    while (merged) {
+      merged = false
+      for (let i = 0; i < nets.length; i++) {
+        for (let j = i + 1; j < nets.length; j++) {
+          const intersect = [...nets[i]].some(x => nets[j].has(x))
+          if (intersect) {
+            nets[j].forEach(x => nets[i].add(x))
+            nets.splice(j, 1)
+            merged = true
+            break
+          }
+        }
+        if (merged) break
+      }
+    }
+    return nets
+  }
+
+  const mergedSda = mergeNets(sdaNets)
+
+  mergedSda.forEach((compSet, netIdx) => {
+    const addrMap = new Map() // addr -> list of comp instances
+    compSet.forEach(instId => {
+      const comp = compMap.get(instId)
+      if (!comp || comp.isMCU) return
+      const cid = (comp.id || '').toLowerCase()
+      for (const [key, profile] of Object.entries(I2C_DEVICE_PROFILES)) {
+        if (cid.includes(key)) {
+          if (!addrMap.has(profile.addr)) addrMap.set(profile.addr, [])
+          addrMap.get(profile.addr).push({ comp, profile })
+          break
+        }
+      }
+    })
+
+    addrMap.forEach((devices, addr) => {
+      if (devices.length > 1) {
+        const names = devices.map(d => `"${d.comp.label || d.comp.id}"`).join(' dan ')
+        const alt = devices[0].profile.alt ? ` (misal: ${devices[0].profile.alt})` : ''
+        issues.push({
+          id: `erc_i2c_conflict_${netIdx}_${addr}`,
+          level: 'error',
+          title: `Konflik Alamat I2C Bus Terdeteksi (${addr})`,
+          desc: `Komponen ${names} terhubung pada bus I2C yang sama dan memakai alamat default identik (${addr}). Komunikasi I2C akan gagal karena tabrakan ACK/NACK. Rekomendasi: Ubah pin jumper ADDR ke alamat alternatif${alt} atau pasang I2C Multiplexer TCA9548A.`,
+          compA: devices[0].comp.instanceId,
+          compB: devices[1].comp.instanceId
+        })
+      }
+    })
+  })
+
+  // 4. Power Budget Analysis
+  const powerBudget = calculatePowerBudget(components)
+  if (powerBudget.warningMessage) {
+    issues.push({
+      id: 'erc_power_budget_warning',
+      level: powerBudget.status === 'danger' ? 'error' : 'warning',
+      title: '⚠️ Kelebihan Beban Arus (Power Budget Deficit)',
+      desc: powerBudget.warningMessage
+    })
+  }
+
   const errors = issues.filter(i => i.level === 'error')
   const warnings = issues.filter(i => i.level === 'warning')
   const info = issues.filter(i => i.level === 'info')
@@ -319,6 +503,7 @@ export function runERC(components = [], wires = []) {
     errors,
     warnings,
     info,
+    powerBudget,
     totalCount: issues.length,
     status: errors.length > 0 ? 'error' : warnings.length > 0 ? 'warning' : 'ok'
   }

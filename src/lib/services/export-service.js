@@ -2,6 +2,9 @@
  * Export and File Delivery Service
  * Pure utility functions for SVG, PNG, CSV, JSON, and Project Sharing.
  */
+import JSZip from 'jszip'
+import { generatePlatformIOProject } from '$lib/engine/codegen.js'
+import { generateWokwiDiagram } from '$lib/engine/wokwi.js'
 
 export function downloadFile(content, filename, mime, isDataUrl = false) {
   const a = document.createElement('a')
@@ -457,4 +460,41 @@ export function exportFabricationDocPack({
   printWin.document.close()
   return true
 }
+
+export async function exportPlatformIOProjectZip({
+  projectName = 'WiringDiagram',
+  components = [],
+  wires = []
+}) {
+  const zip = new JSZip()
+  const pioData = generatePlatformIOProject(components, wires, projectName)
+  const wokwiData = generateWokwiDiagram(components, wires, projectName)
+
+  // Root files
+  zip.file('platformio.ini', pioData.platformioIni)
+  zip.file('README.md', pioData.readmeMd)
+  zip.file('diagram.json', JSON.stringify(wokwiData, null, 2))
+
+  // src directory
+  const srcFolder = zip.folder('src')
+  srcFolder.file('main.cpp', pioData.mainCpp)
+
+  // include directory
+  const incFolder = zip.folder('include')
+  incFolder.file('pinout.h', pioData.pinoutH)
+
+  const cleanName = (projectName || 'WiringDiagram').replace(/[^a-zA-Z0-9_\-]/g, '_')
+  const blob = await zip.generateAsync({ type: 'blob' })
+
+  const a = document.createElement('a')
+  a.download = `${cleanName}_PlatformIO.zip`
+  a.href = URL.createObjectURL(blob)
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(a.href)
+
+  return `${cleanName}_PlatformIO.zip`
+}
+
 

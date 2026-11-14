@@ -41,6 +41,9 @@
         <option value="potentiometer_pwm">🎛️ 3. Potensiometer ADC & PWM Dimmer</option>
         <option value="oled_counter">📺 4. Display Grafis OLED SSD1306 (I2C)</option>
         <option value="logic_and_gate">⚡ 5. Gerbang Logika Digital (74HC08 AND Gate)</option>
+        <option value="servo_sweep">🦾 6. Servo Motor Sweep (SG90)</option>
+        <option value="ultrasonic_sonar">📡 7. Sensor Jarak Ultrasonik (HC-SR04)</option>
+        <option value="relay_switch">🔌 8. Modul Relai 5V Otomatis</option>
       </select>
     </div>
 
@@ -89,7 +92,7 @@
         placeholder="// Tulis kode Arduino C++ Anda di sini..."
       ></textarea>
 
-      <!-- Live Serial Monitor Terminal -->
+      <!-- Live Serial Monitor & Plotter Terminal -->
       <div class="serial-pane">
         <div class="serial-header">
           <span>📟 Serial Monitor (UART 0)</span>
@@ -98,10 +101,12 @@
               <option value="115200">115200 baud</option>
               <option value="9600">9600 baud</option>
             </select>
+            <button id="btn-toggle-plotter" onclick="serialMonitor.togglePlotter()" style="background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); color: var(--cyan-neon); font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer;" title="Beralih ke grafik visual waveform plotter">📈 Plotter</button>
             <button onclick="serialMonitor.clear()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">Bersihkan</button>
           </div>
         </div>
         <div id="serial-output" class="serial-logs"></div>
+        <canvas id="serial-plotter-canvas" style="display: none; width: 100%; height: 160px; background: #090d16;"></canvas>
         <div class="serial-input-row">
           <input
             id="serial-input-box"
@@ -121,14 +126,15 @@
         <span style="font-size: 11px; font-weight: 700; color: var(--cyan-neon); margin-right: 4px;">+ Komponen:</span>
         <button class="btn-tool" onclick="addComponent('LED_RED')">🔴 LED Merah</button>
         <button class="btn-tool" onclick="addComponent('LED_GREEN')">🟢 LED Hijau</button>
-        <button class="btn-tool" onclick="addComponent('LED_BLUE')">🔵 LED Biru</button>
-        <button class="btn-tool" onclick="addComponent('BUTTON')">🔘 Push Button</button>
-        <button class="btn-tool" onclick="addComponent('POTENTIOMETER')">🎛️ Potensiometer</button>
+        <button class="btn-tool" onclick="addComponent('BUTTON')">🔘 Button</button>
+        <button class="btn-tool" onclick="addComponent('POTENTIOMETER')">🎛️ Potensio</button>
         <button class="btn-tool" onclick="addComponent('OLED')">📺 OLED SSD1306</button>
+        <button class="btn-tool" onclick="addComponent('SERVO')">🦾 Servo SG90</button>
+        <button class="btn-tool" onclick="addComponent('RELAY')">🔌 Relai 5V</button>
+        <button class="btn-tool" onclick="addComponent('HCSR04')">📡 HC-SR04</button>
         <button class="btn-tool" onclick="addComponent('BUZZER')">🔊 Buzzer</button>
-        <button class="btn-tool" onclick="addComponent('GATE_AND')">⚡ Gerbang AND</button>
-        <button class="btn-tool" onclick="addComponent('GATE_OR')">⚡ Gerbang OR</button>
-        <button class="btn-tool" onclick="addComponent('GATE_NOT')">⚡ Gerbang NOT</button>
+        <button class="btn-tool" onclick="addComponent('GATE_AND')">⚡ AND</button>
+        <button class="btn-tool" onclick="addComponent('GATE_OR')">⚡ OR</button>
         <button class="btn-tool" style="margin-left: auto;" onclick="exportCircuit()">💾 Ekspor JSON</button>
       </div>
 
@@ -162,6 +168,9 @@
   <script src="js/components/buzzer.js"></script>
   <script src="js/components/oled_ssd1306.js"></script>
   <script src="js/components/logic_gates.js"></script>
+  <script src="js/components/servo.js"></script>
+  <script src="js/components/relay.js"></script>
+  <script src="js/components/ultrasonic_hcsr04.js"></script>
 
   <!-- UI & Controls Scripts -->
   <script src="js/ui/canvas_view.js"></script>

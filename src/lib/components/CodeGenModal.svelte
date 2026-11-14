@@ -1,6 +1,7 @@
 <script>
   import { generatePinCode } from '$lib/engine/codegen.js'
   import { generateWokwiDiagram } from '$lib/engine/wokwi.js'
+  import { exportPlatformIOProjectZip } from '$lib/services/export-service.js'
   import { MCU_PINS } from '$lib/data/mcu-pins.js'
 
   export let show = false
@@ -325,6 +326,18 @@
     URL.revokeObjectURL(url)
   }
 
+  async function downloadPlatformIOZip() {
+    try {
+      await exportPlatformIOProjectZip({
+        projectName,
+        components,
+        wires
+      })
+    } catch (e) {
+      alert('Gagal mengekspor PlatformIO ZIP: ' + e.message)
+    }
+  }
+
   function launchInSimulator() {
     try {
       const data = {
@@ -427,6 +440,9 @@
           </button>
         </div>
         <div class="footer-actions">
+          <button class="btn-action" style="background: linear-gradient(135deg, #06b6d4, #2563eb); color: #fff; border: 1px solid rgba(255,255,255,0.2);" on:click={downloadPlatformIOZip} title="Download PlatformIO project structure with platformio.ini & libraries">
+            📦 Unduh PlatformIO (.ZIP)
+          </button>
           <button class="btn-action" on:click={downloadCode}>💾 Unduh File ({activeTab})</button>
           <button class="btn-action btn-pri" on:click={copyCode}>
             {copied ? '✓ Tersalin ke Clipboard!' : '📋 Salin Kode'}

@@ -57,8 +57,12 @@ class CodeRunner {
     js = js.replace(/\bvoid\s+loop\s*\(\s*\)/g, "async function loop()");
     js = js.replace(/\b(?:void|int|bool|boolean|float|double|String)\s+([a-zA-Z0-9_]+)\s*\(/g, "async function $1(");
 
-    // 8. Replace delay(ms) with await delay(ms)
+    // 8. Replace delay(ms) with await delay(ms) & pulseIn with await pulseIn
     js = js.replace(/\bdelay\s*\(\s*([^)]+)\s*\)/g, "await delay($1)");
+    js = js.replace(/\bpulseIn\s*\(\s*([^)]+)\s*\)/g, "await pulseIn($1)");
+
+    // 9. Support Servo instantiation: Servo myservo; -> const myservo = new Servo();
+    js = js.replace(/\bServo\s+([a-zA-Z0-9_]+)\s*;/g, "const $1 = new Servo();");
 
     return js;
   }
@@ -127,6 +131,37 @@ class CodeRunner {
             const oled = this.findOledDisplay();
             if (oled) oled.refresh();
           }
+        },
+        // Virtual Servo Motor API
+        Servo: (() => {
+          const self = this;
+          return class {
+            constructor() {
+              this.pin = null;
+              this.angle = 90;
+            }
+            attach(p) {
+              this.pin = p;
+              const s = self.findServo(p);
+              if (s) s.write(this.angle);
+            }
+            write(a) {
+              this.angle = Math.max(0, Math.min(180, a));
+              const s = self.findServo(this.pin);
+              if (s) s.write(this.angle);
+            }
+            read() {
+              return this.angle;
+            }
+          };
+        })(),
+        // Ultrasonic HC-SR04 pulseIn API
+        pulseIn: async (p, val, timeout = 1000000) => {
+          const s = this.findSonar(p);
+          if (s) {
+            return s.getEchoDurationUs();
+          }
+          return 0;
         }
       };
 
@@ -176,6 +211,20 @@ class CodeRunner {
   findOledDisplay() {
     for (const comp of this.engine.components.values()) {
       if (comp.type === "OLED_SSD1306") return comp;
+    }
+    return null;
+  }
+
+  findServo(pin) {
+    for (const comp of this.engine.components.values()) {
+      if (comp.type === "SERVO") return comp;
+    }
+    return null;
+  }
+
+  findSonar(pin) {
+    for (const comp of this.engine.components.values()) {
+      if (comp.type === "HCSR04") return comp;
     }
     return null;
   }

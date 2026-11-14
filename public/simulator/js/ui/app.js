@@ -59,6 +59,12 @@ function initSimulator() {
               comp = new VirtualPotentiometer(`pot_${idx}`, offsetX, offsetY);
             else if (p.type.includes("ssd1306"))
               comp = new VirtualOledSSD1306(`oled_${idx}`, offsetX, offsetY);
+            else if (p.type.includes("servo"))
+              comp = new VirtualServo(`servo_${idx}`, offsetX, offsetY);
+            else if (p.type.includes("relay"))
+              comp = new VirtualRelay(`relay_${idx}`, offsetX, offsetY);
+            else if (p.type.includes("ultrasonic") || p.type.includes("sonar") || p.type.includes("hcsr04"))
+              comp = new VirtualHCSR04(`sonar_${idx}`, offsetX, offsetY);
             if (comp) {
               engine.addComponent(comp);
               offsetY += 95;
@@ -188,6 +194,9 @@ function addComponent(type) {
     case "BUTTON": comp = new VirtualButton(id, centerX, centerY); break;
     case "POTENTIOMETER": comp = new VirtualPotentiometer(id, centerX, centerY); break;
     case "OLED": comp = new VirtualOledSSD1306(id, centerX, centerY); break;
+    case "SERVO": comp = new VirtualServo(id, centerX, centerY); break;
+    case "RELAY": comp = new VirtualRelay(id, centerX, centerY); break;
+    case "HCSR04": comp = new VirtualHCSR04(id, centerX, centerY); break;
     case "BUZZER": comp = new VirtualBuzzer(id, centerX, centerY); break;
     case "GATE_AND": comp = new VirtualLogicGate(id, "AND", centerX, centerY); break;
     case "GATE_OR": comp = new VirtualLogicGate(id, "OR", centerX, centerY); break;

@@ -166,6 +166,9 @@
           <button class="pill-btn" class:pill-active={activeFilter==='errors'} on:click={() => activeFilter = 'errors'}>Bahaya ({totalErrors})</button>
           <button class="pill-btn" class:pill-active={activeFilter==='warnings'} on:click={() => activeFilter = 'warnings'}>Peringatan ({totalWarnings})</button>
           <button class="pill-btn" class:pill-active={activeFilter==='matrix'} on:click={() => activeFilter = 'matrix'}>Level Shifter Matrix</button>
+          <button class="pill-btn" class:pill-active={activeFilter==='power'} on:click={() => activeFilter = 'power'}>
+            ⚡ Power Budget ({ercResult.powerBudget?.totalPeakMa || 0} mA)
+          </button>
         </div>
       </div>
 
@@ -202,6 +205,81 @@
                 <p class="vr-body">Untuk bus I2C bi-directional, gunakan modul <strong>Bi-Directional Logic Level Converter (BSS138 MOSFET)</strong> dengan resistor pull-up $4.7\text{k}\Omega$ di kedua sisi.</p>
               </div>
             </div>
+          </div>
+        {:else if activeFilter === 'power'}
+          <!-- Power Budget Telemetry Tab -->
+          {@const pb = ercResult.powerBudget || { totalPeakMa: 0, totalIdleMa: 0, limitMa: 500, breakdown: [] }}
+          <div class="matrix-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <h3 class="mc-title" style="margin: 0;">⚡ Analisis Konsumsi Daya & Arus Sirkuit</h3>
+                <p class="mc-desc" style="margin: 4px 0 0 0;">Estimasi kebutuhan arus total vs kapasitas port USB / regulator LDO onboard:</p>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div style="background: rgba(15,23,42,0.6); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); text-align: right;">
+                  <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase;">Arus Puncak (Peak)</div>
+                  <div style="font-size: 16px; font-weight: 800; color: {pb.totalPeakMa > 800 ? '#ef4444' : (pb.totalPeakMa > 500 ? '#f59e0b' : '#10b981')};">
+                    {pb.totalPeakMa} mA
+                  </div>
+                </div>
+                <div style="background: rgba(15,23,42,0.6); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); text-align: right;">
+                  <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase;">Arus Standby (Idle)</div>
+                  <div style="font-size: 16px; font-weight: 800; color: #38bdf8;">
+                    {pb.totalIdleMa} mA
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Progress Meter -->
+            <div style="margin-bottom: 16px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                <span style="color: #94a3b8;">Beban Terhadap Limit USB 2.0 (500 mA):</span>
+                <span style="font-weight: 700; color: {pb.totalPeakMa > 500 ? '#f87171' : '#4ade80'};">
+                  {Math.round((pb.totalPeakMa / 500) * 100)}%
+                </span>
+              </div>
+              <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden;">
+                <div style="width: {Math.min(Math.round((pb.totalPeakMa / 500) * 100), 100)}%; height: 100%; background: {pb.totalPeakMa > 800 ? '#ef4444' : (pb.totalPeakMa > 500 ? 'linear-gradient(90deg, #10b981, #f59e0b)' : '#10b981')}; border-radius: 999px;"></div>
+              </div>
+            </div>
+
+            {#if pb.warningMessage}
+              <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 12px; color: #fca5a5; line-height: 1.5;">
+                ⚠️ <strong>Peringatan Daya:</strong> {pb.warningMessage}
+              </div>
+            {/if}
+
+            <!-- Breakdown Table -->
+            <h4 style="font-size: 12px; font-weight: 700; color: #e2e8f0; margin-bottom: 8px;">Daftar Konsumsi Arus per Komponen</h4>
+            {#if pb.breakdown && pb.breakdown.length > 0}
+              <div style="overflow-x: auto;">
+                <table style="width: 100%; font-size: 11px; border-collapse: collapse; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: #94a3b8;">
+                      <th style="padding: 6px;">Komponen</th>
+                      <th style="padding: 6px;">Deskripsi / Tipe</th>
+                      <th style="padding: 6px;">Tegangan</th>
+                      <th style="padding: 6px; text-align: right;">Arus Idle</th>
+                      <th style="padding: 6px; text-align: right;">Arus Peak</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each pb.breakdown as item}
+                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                        <td style="padding: 6px; font-weight: 700; color: #38bdf8;">{item.label}</td>
+                        <td style="padding: 6px; color: #cbd5e1;">{item.name}</td>
+                        <td style="padding: 6px; color: #94a3b8;">{item.voltage}V</td>
+                        <td style="padding: 6px; text-align: right; color: #64748b;">{item.idleMa} mA</td>
+                        <td style="padding: 6px; text-align: right; font-weight: 700; color: {item.peakMa >= 100 ? '#f59e0b' : '#f8fafc'};">{item.peakMa} mA</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {:else}
+              <p style="font-size: 11px; color: #64748b;">Tidak ada komponen aktif terdaftar yang mengonsumsi arus signifikan.</p>
+            {/if}
           </div>
         {:else if filteredIssues.length === 0}
           <div class="clean-state">

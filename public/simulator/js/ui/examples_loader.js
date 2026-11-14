@@ -254,6 +254,164 @@ void loop() {
 
       return mcu;
     }
+  },
+
+  servo_sweep: {
+    title: "6. Servo Motor Sweep (SG90)",
+    code: `// ==========================================
+// 🦾 Contoh 6: Kendali Sudut Servo Motor SG90
+// ==========================================
+#include <Servo.h>
+
+Servo myServo;
+int angle = 0;
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Inisialisasi Micro Servo SG90...");
+  myServo.attach(18); // Pin GPIO 18 terhubung ke Signal Servo
+}
+
+void loop() {
+  // Putar perlahan dari 0 derajat ke 180 derajat
+  for (angle = 0; angle <= 180; angle += 30) {
+    myServo.write(angle);
+    Serial.print("Servo Angle: ");
+    Serial.println(angle);
+    delay(400);
+  }
+
+  // Putar kembali ke 0 derajat
+  for (angle = 180; angle >= 0; angle -= 30) {
+    myServo.write(angle);
+    Serial.print("Servo Angle: ");
+    Serial.println(angle);
+    delay(400);
+  }
+}
+`,
+    setup: (engine) => {
+      engine.reset();
+      engine.components.clear();
+      engine.wires = [];
+
+      const mcu = new VirtualMCU("mcu1", "ESP32-S3", 80, 80);
+      const servo = new VirtualServo("servo1", 340, 130);
+      engine.addComponent(mcu);
+      engine.addComponent(servo);
+
+      // Wires: 5V -> VCC, GND -> GND, D18 -> SIG
+      engine.addWire("mcu1", "VIN", "servo1", "vcc", "#ef4444");
+      engine.addWire("mcu1", "GND_1", "servo1", "gnd", "#78350f");
+      engine.addWire("mcu1", "D18", "servo1", "sig", "#f59e0b");
+
+      return mcu;
+    }
+  },
+
+  ultrasonic_sonar: {
+    title: "7. Sensor Jarak Ultrasonik (HC-SR04)",
+    code: `// ==========================================
+// 📡 Contoh 7: Radar Sensor Ultrasonik HC-SR04
+// ==========================================
+const int TRIG_PIN = 4; // GPIO 4 (Trigger Output)
+const int ECHO_PIN = 5; // GPIO 5 (Echo Input)
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  Serial.println("HC-SR04 Ultrasonic Radar Running...");
+  Serial.println("Tarik slider sensor pada canvas untuk simulasi jarak objek!");
+}
+
+void loop() {
+  // Kirim pulsa trigger 10us
+  digitalWrite(TRIG_PIN, LOW);
+  delay(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delay(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // Ukur durasi pantulan gelombang suara
+  long durationUs = pulseIn(ECHO_PIN, HIGH);
+  long distanceCm = durationUs / 58;
+
+  // Cetak ke Serial (dan otomatis terplot di Waveform Plotter)
+  Serial.println(distanceCm);
+  delay(300);
+}
+`,
+    setup: (engine) => {
+      engine.reset();
+      engine.components.clear();
+      engine.wires = [];
+
+      const mcu = new VirtualMCU("mcu1", "ESP32-S3", 80, 80);
+      const sonar = new VirtualHCSR04("sonar1", 340, 140);
+      engine.addComponent(mcu);
+      engine.addComponent(sonar);
+
+      // Wires: 5V, GND, D4 -> TRIG, D5 -> ECHO
+      engine.addWire("mcu1", "VIN", "sonar1", "vcc", "#ef4444");
+      engine.addWire("mcu1", "GND_1", "sonar1", "gnd", "#000000");
+      engine.addWire("mcu1", "D4", "sonar1", "trig", "#00f0ff");
+      engine.addWire("mcu1", "D5", "sonar1", "echo", "#ec4899");
+
+      return mcu;
+    }
+  },
+
+  relay_switch: {
+    title: "8. Modul Relai 5V Otomatis",
+    code: `// ==========================================
+// 🔌 Contoh 8: Otomasi Sakelar Relai 5V
+// ==========================================
+const int RELAY_PIN = 4; // GPIO 4 (Active LOW)
+const int LED_PIN = 2;   // GPIO 2 (Status LED)
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // Standby (OFF)
+  Serial.println("Relay Switch Automation Ready!");
+}
+
+void loop() {
+  Serial.println("Relay AKTIF (Kontak COM terhubung ke NO)");
+  digitalWrite(RELAY_PIN, LOW); // Sakelar terhubung
+  digitalWrite(LED_PIN, HIGH);
+  delay(2000);
+
+  Serial.println("Relay PADAM (Kontak COM terhubung ke NC)");
+  digitalWrite(RELAY_PIN, HIGH); // Sakelar terputus
+  digitalWrite(LED_PIN, LOW);
+  delay(2000);
+}
+`,
+    setup: (engine) => {
+      engine.reset();
+      engine.components.clear();
+      engine.wires = [];
+
+      const mcu = new VirtualMCU("mcu1", "ESP32-S3", 80, 80);
+      const relay = new VirtualRelay("relay1", 340, 100);
+      const led = new VirtualLED("led1", "green", 350, 220);
+      engine.addComponent(mcu);
+      engine.addComponent(relay);
+      engine.addComponent(led);
+
+      // Wires
+      engine.addWire("mcu1", "VIN", "relay1", "vcc", "#ef4444");
+      engine.addWire("mcu1", "GND_1", "relay1", "gnd", "#000000");
+      engine.addWire("mcu1", "D4", "relay1", "in", "#f59e0b");
+
+      engine.addWire("mcu1", "D2", "led1", "anode", "#10b981");
+      engine.addWire("mcu1", "GND_1", "led1", "cathode", "#000000");
+
+      return mcu;
+    }
   }
 };
 

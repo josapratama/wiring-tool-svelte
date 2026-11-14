@@ -936,10 +936,99 @@ G90
   }
   drl += "M30\n";
 
+  // 5. Top Silkscreen (F.SilkS / GTO)
+  let gto = gerberHeader("Top Silkscreen Layer");
+  gto += `%ADD10C,0.1500*%\n%ADD11C,0.6000*%\n`;
+  for (const c of pcbComponents) {
+    if (c.layer === "bottom") continue;
+    const fp = c.footprint || getFootprintForComponent(c);
+    const hw = (fp.widthMm || 8) / 2;
+    const hh = (fp.heightMm || 6) / 2;
+    const x1 = c.xMm - hw;
+    const y1 = c.yMm - hh;
+    const x2 = c.xMm + hw;
+    const y2 = c.yMm + hh;
+
+    // Component courtyard outline
+    gto += `D10*\n`;
+    gto += `G00X${formatGerberCoord(x1)}Y${formatGerberCoord(y1)}D02*\n`;
+    gto += `G01X${formatGerberCoord(x2)}Y${formatGerberCoord(y1)}D01*\n`;
+    gto += `G01X${formatGerberCoord(x2)}Y${formatGerberCoord(y2)}D01*\n`;
+    gto += `G01X${formatGerberCoord(x1)}Y${formatGerberCoord(y2)}D01*\n`;
+    gto += `G01X${formatGerberCoord(x1)}Y${formatGerberCoord(y1)}D01*\n`;
+
+    // Pin 1 indicator dot
+    if (fp.pads && fp.pads.length > 0) {
+      const p1 = fp.pads[0];
+      const p1x = c.xMm + p1.x;
+      const p1y = c.yMm + p1.y;
+      gto += `D11*\n`;
+      gto += `G00X${formatGerberCoord(p1x - 1.2)}Y${formatGerberCoord(p1y)}D03*\n`;
+    }
+
+    // Diode / LED Cathode Bar
+    const cid = (c.id || "").toLowerCase();
+    if (cid.includes("led") || cid.includes("diode")) {
+      gto += `D10*\n`;
+      gto += `G00X${formatGerberCoord(x2 - 1.0)}Y${formatGerberCoord(y1)}D02*\n`;
+      gto += `G01X${formatGerberCoord(x2 - 1.0)}Y${formatGerberCoord(y2)}D01*\n`;
+    }
+  }
+  gto += "M02*\n";
+
+  // 6. Bottom Silkscreen (B.SilkS / GBO)
+  let gbo = gerberHeader("Bottom Silkscreen Layer");
+  gbo += `%ADD10C,0.1500*%\n`;
+  for (const c of pcbComponents) {
+    if (c.layer !== "bottom") continue;
+    const fp = c.footprint || getFootprintForComponent(c);
+    const hw = (fp.widthMm || 8) / 2;
+    const hh = (fp.heightMm || 6) / 2;
+    gbo += `D10*\n`;
+    gbo += `G00X${formatGerberCoord(c.xMm - hw)}Y${formatGerberCoord(c.yMm - hh)}D02*\n`;
+    gbo += `G01X${formatGerberCoord(c.xMm + hw)}Y${formatGerberCoord(c.yMm - hh)}D01*\n`;
+    gbo += `G01X${formatGerberCoord(c.xMm + hw)}Y${formatGerberCoord(c.yMm + hh)}D01*\n`;
+    gbo += `G01X${formatGerberCoord(c.xMm - hw)}Y${formatGerberCoord(c.yMm + hh)}D01*\n`;
+    gbo += `G01X${formatGerberCoord(c.xMm - hw)}Y${formatGerberCoord(c.yMm - hh)}D01*\n`;
+  }
+  gbo += "M02*\n";
+
+  // 7. Top Solder Mask (F.Mask / GTS)
+  let gts = gerberHeader("Top Solder Mask Layer");
+  gts += `%ADD20R,1.8000X1.8000*%\n%ADD21C,1.8000*%\n`;
+  for (const c of pcbComponents) {
+    const fp = c.footprint || getFootprintForComponent(c);
+    for (const p of fp.pads) {
+      if (p.layer === "bottom") continue;
+      const apt = p.shape === "rect" ? "D20" : "D21";
+      gts += `${apt}*\n`;
+      gts += `G00X${formatGerberCoord(c.xMm + p.x)}Y${formatGerberCoord(c.yMm + p.y)}D03*\n`;
+    }
+  }
+  gts += "M02*\n";
+
+  // 8. Bottom Solder Mask (B.Mask / GBS)
+  let gbs = gerberHeader("Bottom Solder Mask Layer");
+  gbs += `%ADD20R,1.8000X1.8000*%\n%ADD21C,1.8000*%\n`;
+  for (const c of pcbComponents) {
+    const fp = c.footprint || getFootprintForComponent(c);
+    for (const p of fp.pads) {
+      if (p.layer === "top") continue;
+      const apt = p.shape === "rect" ? "D20" : "D21";
+      gbs += `${apt}*\n`;
+      gbs += `G00X${formatGerberCoord(c.xMm + p.x)}Y${formatGerberCoord(c.yMm + p.y)}D03*\n`;
+    }
+  }
+  gbs += "M02*\n";
+
   return {
     "Edge_Cuts.gko": gko,
     "Top_Copper.gtl": gtl,
     "Bottom_Copper.gbl": gbl,
+    "Top_Silkscreen.gto": gto,
+    "Bottom_Silkscreen.gbo": gbo,
+    "Top_Soldermask.gts": gts,
+    "Bottom_Soldermask.gbs": gbs,
     "Drill.drl": drl
   };
 }

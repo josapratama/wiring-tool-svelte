@@ -304,6 +304,12 @@ class CanvasView {
       this.drawBuzzer(ctx, comp);
     } else if (comp.type === "LOGIC_GATE") {
       this.drawLogicGate(ctx, comp);
+    } else if (comp.type === "SERVO") {
+      this.drawServo(ctx, comp);
+    } else if (comp.type === "RELAY") {
+      this.drawRelay(ctx, comp);
+    } else if (comp.type === "HCSR04") {
+      this.drawHCSR04(ctx, comp);
     }
 
     ctx.restore();
@@ -506,6 +512,183 @@ class CanvasView {
       ctx.fillStyle = "#94a3b8";
       ctx.font = "9px monospace";
       ctx.fillText(pin.name, pin.side === "left" ? pin.xOffset + 10 : pin.xOffset - 10, pin.yOffset + 3);
+    }
+  }
+
+  drawServo(ctx, comp) {
+    // Blue translucent servo body
+    ctx.fillStyle = "#0284c7";
+    ctx.fillRect(0, 15, comp.width, comp.height - 15);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(0, 15, comp.width, comp.height - 15);
+
+    // Mounting tabs
+    ctx.fillStyle = "#0369a1";
+    ctx.fillRect(-8, 30, 8, 12);
+    ctx.fillRect(comp.width, 30, 8, 12);
+
+    // Label & Angle badge
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("SG90 SERVO", comp.width / 2, 45);
+
+    ctx.fillStyle = "#fbbf24";
+    ctx.font = "bold 11px monospace";
+    ctx.fillText(`${Math.round(comp.angle)}°`, comp.width / 2, 60);
+
+    // Rotating Horn
+    const pivotX = comp.width / 2;
+    const pivotY = 18;
+
+    ctx.save();
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate((comp.angle - 90) * Math.PI / 180);
+
+    // Horn arm
+    ctx.fillStyle = "#f8fafc";
+    ctx.beginPath();
+    ctx.roundRect(-5, -28, 10, 32, [4, 4, 0, 0]);
+    ctx.fill();
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Horn center gear
+    ctx.fillStyle = "#cbd5e1";
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#475569";
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Header Pins
+    for (const pin of comp.getPins()) {
+      ctx.fillStyle = pin.id === "gnd" ? "#78350f" : pin.id === "vcc" ? "#ef4444" : "#f59e0b";
+      ctx.beginPath();
+      ctx.arc(pin.xOffset, pin.yOffset, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "8px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(pin.name, pin.xOffset, pin.yOffset - 6);
+    }
+  }
+
+  drawRelay(ctx, comp) {
+    // Relay module PCB
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, comp.width, comp.height);
+    ctx.strokeStyle = "#334151";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(0, 0, comp.width, comp.height);
+
+    // Blue Songle Relay Box
+    ctx.fillStyle = "#1d4ed8";
+    ctx.fillRect(8, 16, comp.width - 16, 44);
+    ctx.strokeStyle = "#60a5fa";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(8, 16, comp.width - 16, 44);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("5V RELAY", comp.width / 2, 34);
+    ctx.font = "8px monospace";
+    ctx.fillText("10A 250VAC", comp.width / 2, 46);
+
+    // Status Indicator LED
+    ctx.fillStyle = comp.isActive ? "#22c55e" : "#334151";
+    ctx.beginPath();
+    ctx.arc(comp.width - 14, 24, 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (comp.isActive) {
+      ctx.shadowColor = "#22c55e";
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Terminals & Pins
+    for (const pin of comp.getPins()) {
+      ctx.fillStyle = pin.type === "CONTACT" ? "#22c55e" : (pin.id === "gnd" ? "#1e293b" : pin.id === "vcc" ? "#ef4444" : "#00f0ff");
+      ctx.beginPath();
+      ctx.arc(pin.xOffset, pin.yOffset, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "8px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(pin.name, pin.xOffset, pin.yOffset < 20 ? pin.yOffset + 11 : pin.yOffset - 6);
+    }
+  }
+
+  drawHCSR04(ctx, comp) {
+    // Sensor PCB
+    ctx.fillStyle = "#0284c7";
+    ctx.fillRect(0, 0, comp.width, comp.height);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(0, 0, comp.width, comp.height);
+
+    // Dual Ultrasonic Transducers (Transmitter & Receiver)
+    const drawTransducer = (cx, cy, label) => {
+      ctx.fillStyle = "#94a3b8";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(label, cx, cy + 4);
+    };
+
+    drawTransducer(28, 28, "T");
+    drawTransducer(82, 28, "R");
+
+    // Interactive Distance Badge
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(comp.width / 2 - 25, 48, 50, 14);
+    ctx.fillStyle = "#fbbf24";
+    ctx.font = "bold 9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(`${comp.distanceCm} cm`, comp.width / 2, 59);
+
+    // Pins
+    for (const pin of comp.getPins()) {
+      ctx.fillStyle = pin.id === "gnd" ? "#1e293b" : pin.id === "vcc" ? "#ef4444" : "#00f0ff";
+      ctx.beginPath();
+      ctx.arc(pin.xOffset, pin.yOffset, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "8px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(pin.name, pin.xOffset, pin.yOffset - 6);
     }
   }
 }
