@@ -33,6 +33,16 @@
   // ── Active Tab Selection ──────────────────────────────────────────────────
   let activeTab = 'terminal' // 'terminal' | 'logic-analyzer'
 
+  // ── Web Serial API (Physical Hardware Connection) ─────────────────────────
+  let connectionMode = 'virtual' // 'virtual' | 'hardware'
+  let isHardwareConnected = false
+  let serialPort = null
+  let serialReader = null
+  let readableStreamClosed = null
+  let dtrState = false
+  let rtsState = false
+  let isWebSerialSupported = typeof navigator !== 'undefined' && 'serial' in navigator
+
   // ── Serial Terminal State ─────────────────────────────────────────────────
   let txCommand = ''
   let baudRate = 115200
@@ -66,8 +76,116 @@
     { label: 'Sensor Dump', cmd: 'read_sensors' }
   ]
 
+  // ── Web Serial Hardware Engine ───────────────────────────────────────────
+  async function connectHardware() {
+    if (!isWebSerialSupported) {
+      appendSerialLog('err', 'Browser ini belum mendukung Web Serial API. Gunakan Chrome, Edge, atau Opera.')
+      return
+    }
+    try {
+      serialPort = await navigator.serial.requestPort()
+      await serialPort.open({ baudRate: Number(baudRate) })
+      isHardwareConnected = true
+      connectionMode = 'hardware'
+      appendSerialLog('sys', `[WEB SERIAL] Terhubung ke port USB Hardware pada ${baudRate} baud.`)
+
+      // Start reader stream loop
+      readLoop()
+    } catch (err) {
+      console.error(err)
+      if (err.name !== 'NotFoundError') {
+        appendSerialLog('err', `[WEB SERIAL] Gagal terhubung: ${err.message}`)
+      }
+      isHardwareConnected = false
+    }
+  }
+
+  async function disconnectHardware() {
+    if (!serialPort) return
+    try {
+      if (serialReader) {
+        await serialReader.cancel()
+        if (readableStreamClosed) await readableStreamClosed.catch(() => {})
+      }
+      await serialPort.close()
+    } catch (e) {
+      console.warn('Error closing port', e)
+    } finally {
+      serialPort = null
+      serialReader = null
+      readableStreamClosed = null
+      isHardwareConnected = false
+      appendSerialLog('sys', '[WEB SERIAL] Port USB Hardware telah diputus.')
+    }
+  }
+
+  async function readLoop() {
+    if (!serialPort || !serialPort.readable) return
+    const textDecoder = new TextDecoderStream()
+    readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable)
+    serialReader = textDecoder.readable.getReader()
+
+    let lineBuffer = ''
+    try {
+      while (true) {
+        const { value, done } = await serialReader.read()
+        if (done) break
+        if (value) {
+          lineBuffer += value
+          const lines = lineBuffer.split(/\r?\n/)
+          lineBuffer = lines.pop() || ''
+          for (const l of lines) {
+            if (l.trim().length > 0) appendSerialLog('rx', l)
+          }
+          if (autoScroll && terminalLogsContainer) {
+            setTimeout(() => {
+              terminalLogsContainer.scrollTop = terminalLogsContainer.scrollHeight
+            }, 30)
+          }
+        }
+      }
+    } catch (err) {
+      if (isHardwareConnected) {
+        appendSerialLog('err', `[WEB SERIAL] Sambungan terhenti: ${err.message}`)
+      }
+    } finally {
+      try { serialReader.releaseLock() } catch {}
+    }
+  }
+
+  async function toggleSignal(signal) {
+    if (!serialPort || !isHardwareConnected) return
+    try {
+      if (signal === 'dtr') {
+        dtrState = !dtrState
+        await serialPort.setSignals({ dataTerminalReady: dtrState })
+        appendSerialLog('sys', `[WEB SERIAL] DTR diset: ${dtrState ? 'HIGH (1)' : 'LOW (0)'}`)
+      } else if (signal === 'rts') {
+        rtsState = !rtsState
+        await serialPort.setSignals({ requestToSend: rtsState })
+        appendSerialLog('sys', `[WEB SERIAL] RTS diset: ${rtsState ? 'HIGH (1)' : 'LOW (0)'}`)
+      } else if (signal === 'reset') {
+        appendSerialLog('sys', '[WEB SERIAL] Mengirim pulsa Hard Reset MCU (DTR/RTS)...')
+        await serialPort.setSignals({ dataTerminalReady: false, requestToSend: true })
+        setTimeout(async () => {
+          try {
+            await serialPort.setSignals({ dataTerminalReady: true, requestToSend: false })
+            setTimeout(async () => {
+              try {
+                await serialPort.setSignals({ dataTerminalReady: false, requestToSend: false })
+                appendSerialLog('sys', '[WEB SERIAL] Reset selesai. MCU booting...')
+              } catch {}
+            }, 100)
+          } catch {}
+        }, 100)
+      }
+    } catch (err) {
+      appendSerialLog('err', `[WEB SERIAL] Gagal set pin sinyal: ${err.message}`)
+    }
+  }
+
   // ── Send Serial Command ───────────────────────────────────────────────────
-  function sendCommand(cmdToSend = null) {
+  async function sendCommand(cmdToSend = null) {
     const text = (cmdToSend !== null ? cmdToSend : txCommand).trim()
     if (!text) return
 
@@ -86,8 +204,21 @@
     appendSerialLog('tx', `> ${text}`)
     if (cmdToSend === null) txCommand = ''
 
-    // Simulate Realistic MCU Response
-    simulateMcuResponse(text)
+    if (isHardwareConnected && serialPort && serialPort.writable) {
+      // Send directly to Physical USB Hardware
+      try {
+        const textWithEnding = text + suffix
+        const encoder = new TextEncoder()
+        const writer = serialPort.writable.getWriter()
+        await writer.write(encoder.encode(textWithEnding))
+        writer.releaseLock()
+      } catch (err) {
+        appendSerialLog('err', `[WEB SERIAL] Gagal mengirim: ${err.message}`)
+      }
+    } else {
+      // Simulate Realistic MCU Response
+      simulateMcuResponse(text)
+    }
 
     // Scroll to bottom
     if (autoScroll && terminalLogsContainer) {
@@ -231,6 +362,7 @@
 
   onDestroy(() => {
     if (analyzerAnimId) cancelAnimationFrame(analyzerAnimId)
+    if (isHardwareConnected) disconnectHardware()
   })
 </script>
 
@@ -281,6 +413,54 @@
       {#if activeTab === 'terminal'}
         <!-- ── TAB 1: SERIAL TERMINAL ── -->
         <div class="sm-terminal-wrap">
+          <!-- Connection Mode Switcher (Virtual vs Real USB Hardware) -->
+          <div class="sm-conn-bar">
+            <div class="sm-mode-pills">
+              <button
+                class="sm-mode-pill"
+                class:active={connectionMode === 'virtual'}
+                on:click={() => { if (isHardwareConnected) disconnectHardware(); connectionMode = 'virtual' }}
+              >
+                💻 Simulasi Virtual MCU
+              </button>
+              <button
+                class="sm-mode-pill"
+                class:active={connectionMode === 'hardware'}
+                on:click={() => connectionMode = 'hardware'}
+              >
+                🔌 Real USB Hardware (Web Serial)
+              </button>
+            </div>
+
+            {#if connectionMode === 'hardware'}
+              <div class="sm-hardware-controls">
+                {#if !isHardwareConnected}
+                  <button class="sm-btn sm-btn-connect" on:click={connectHardware}>
+                    <span>⚡</span>
+                    <span>Hubungkan Port USB/COM</span>
+                  </button>
+                  <span class="sm-status-chip chip-disconnected">● Belum Terkoneksi</span>
+                {:else}
+                  <span class="sm-status-chip chip-connected">● USB Online ({baudRate} baud)</span>
+                  <button class="sm-btn sm-btn-reset" on:click={() => toggleSignal('reset')} title="Kirim sinyal Hardware Reset ke MCU">
+                    <span>🔄</span>
+                    <span>Reset MCU</span>
+                  </button>
+                  <button class="sm-btn sm-btn-signal" class:sig-active={dtrState} on:click={() => toggleSignal('dtr')} title="Toggle DTR signal pin">
+                    DTR {dtrState ? '1' : '0'}
+                  </button>
+                  <button class="sm-btn sm-btn-signal" class:sig-active={rtsState} on:click={() => toggleSignal('rts')} title="Toggle RTS signal pin">
+                    RTS {rtsState ? '1' : '0'}
+                  </button>
+                  <button class="sm-btn sm-btn-disconnect" on:click={disconnectHardware}>
+                    <span>✕</span>
+                    <span>Putus</span>
+                  </button>
+                {/if}
+              </div>
+            {/if}
+          </div>
+
           <!-- Terminal Toolbar Controls -->
           <div class="sm-toolbar">
             <div class="sm-tool-group">
@@ -643,6 +823,104 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  /* ── Web Serial Mode Connection Bar ── */
+  .sm-conn-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #060a12;
+    border-bottom: 1px solid #1e293b;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .sm-mode-pills {
+    display: flex;
+    background: #0f172a;
+    padding: 2px;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+  }
+  .sm-mode-pill {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .sm-mode-pill.active {
+    background: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(2, 132, 199, 0.4);
+  }
+  .sm-hardware-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sm-status-chip {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .chip-connected {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+  .chip-disconnected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .sm-btn-connect {
+    background: #059669;
+    color: #ffffff;
+    border: 1px solid #10b981;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  }
+  .sm-btn-connect:hover {
+    background: #10b981;
+  }
+  .sm-btn-disconnect {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .sm-btn-disconnect:hover {
+    background: #ef4444;
+    color: #ffffff;
+  }
+  .sm-btn-reset {
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: #f8fafc;
+  }
+  .sm-btn-reset:hover {
+    background: #334155;
+    border-color: #38bdf8;
+  }
+  .sm-btn-signal {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #94a3b8;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 5px;
+  }
+  .sm-btn-signal.sig-active {
+    background: #eab308;
+    color: #000;
+    font-weight: 700;
+    border-color: #facc15;
   }
 
   .sm-toolbar {

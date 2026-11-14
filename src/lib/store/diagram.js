@@ -757,3 +757,234 @@ export function getDiscoveredNets() {
     pinList: Array.from(n.pins),
   }));
 }
+
+// ── Smart Bus Auto-Connect (I2C, SPI, UART, Power) ───────────
+export function autoConnectBus(targetCompId) {
+  const cs = get(components);
+  const target = cs.find((c) => c.instanceId === targetCompId);
+  if (!target) return { success: false, message: "Komponen tidak ditemukan." };
+  if (target.isMCU) return { success: false, message: "Pilih komponen modul atau sensor (bukan mikrokontroler)." };
+
+  // Find primary MCU in diagram
+  const mcu = cs.find(
+    (c) =>
+      c.isMCU ||
+      ["esp32-devkit", "esp32s3-devkit", "arduino-uno", "arduino-nano", "arduino-mega", "rpi-pico"].includes(c.id)
+  );
+  if (!mcu) {
+    return {
+      success: false,
+      message: "Tidak ditemukan mikrokontroler (ESP32, Arduino, Pico) di kanvas. Pasang MCU terlebih dahulu.",
+    };
+  }
+
+  const existingWires = get(wires);
+  const targetPins = target.pins ?? [];
+  if (!targetPins.length) {
+    return { success: false, message: "Komponen ini tidak memiliki pin yang terdaftar." };
+  }
+
+  const mcuPins = mcu.isMCU && MCU_PINS[mcu.id]
+    ? [...(MCU_PINS[mcu.id].left ?? []), ...(MCU_PINS[mcu.id].right ?? [])]
+    : mcu.pins ?? [];
+
+  const isPinConnected = (pinId) =>
+    existingWires.some(
+      (w) =>
+        (w.fromComp === target.instanceId && w.fromPin === pinId) ||
+        (w.toComp === target.instanceId && w.toPin === pinId)
+    );
+
+  let connectedCount = 0;
+  pushHistory();
+
+  const findMcuPin = (matcher) => mcuPins.find(matcher);
+
+  targetPins.forEach((p) => {
+    if (isPinConnected(p.id)) return;
+    const pName = (p.label || p.id || "").toLowerCase();
+
+    // 1. Ground Matcher
+    if (/gnd|vss|ground|0v|\b-\b/i.test(pName)) {
+      const mcuGnd = findMcuPin((mp) => mp.type === "gnd" || /gnd/i.test(mp.label || mp.id));
+      if (mcuGnd) {
+        addWire({
+          fromComp: target.instanceId,
+          fromPin: p.id,
+          toComp: mcu.instanceId,
+          toPin: mcuGnd.id,
+          color: "#1f2937",
+          routingMode: "orthogonal",
+        });
+        connectedCount++;
+        return;
+      }
+    }
+
+    // 2. VCC / Power Matcher
+    if (/vcc|vdd|3v3|3\.3v|5v|power|\b\+\b/i.test(pName)) {
+      let mcuVcc = null;
+      if (/3v3|3\.3v/i.test(pName) || /esp32|pico/i.test(mcu.id)) {
+        mcuVcc = findMcuPin((mp) => /3v3|3\.3v/i.test(mp.label || mp.id) || (mp.type === "power" && mp.num === "3V3"));
+      }
+      if (!mcuVcc) {
+        mcuVcc = findMcuPin((mp) => mp.type === "power" || /5v|vcc|vin/i.test(mp.label || mp.id));
+      }
+      if (mcuVcc) {
+        addWire({
+          fromComp: target.instanceId,
+          fromPin: p.id,
+          toComp: mcu.instanceId,
+          toPin: mcuVcc.id,
+          color: "#ef4444",
+          routingMode: "orthogonal",
+        });
+        connectedCount++;
+        return;
+      }
+    }
+
+    // 3. I2C SDA
+    if (/sda|sdat|data/i.test(pName)) {
+      let mcuSda = findMcuPin(
+        (mp) =>
+          mp.type === "i2c" &&
+          (/sda/i.test(mp.label || mp.id) || /g21|g8|a4/i.test(mp.id))
+      );
+      if (!mcuSda) {
+        mcuSda = findMcuPin((mp) => /sda/i.test(mp.label || mp.id));
+      }
+      if (mcuSda) {
+        addWire({
+          fromComp: target.instanceId,
+          fromPin: p.id,
+          toComp: mcu.instanceId,
+          toPin: mcuSda.id,
+          color: "#3b82f6",
+          routingMode: "orthogonal",
+        });
+        connectedCount++;
+        return;
+      }
+    }
+
+    // 4. I2C SCL
+    if (/scl|sclk|clk|clock/i.test(pName)) {
+      let mcuScl = findMcuPin(
+        (mp) =>
+          mp.type === "i2c" &&
+          (/scl/i.test(mp.label || mp.id) || /g22|g9|a5/i.test(mp.id))
+      );
+      if (!mcuScl) {
+        mcuScl = findMcuPin((mp) => /scl/i.test(mp.label || mp.id));
+      }
+      if (mcuScl) {
+        addWire({
+          fromComp: target.instanceId,
+          fromPin: p.id,
+          toComp: mcu.instanceId,
+          toPin: mcuScl.id,
+          color: "#eab308",
+          routingMode: "orthogonal",
+        });
+        connectedCount++;
+        return;
+      }
+    }
+
+    // 5. UART TX (Module TX -> MCU RX)
+    if (/tx|txd/i.test(pName)) {
+      const mcuRx = findMcuPin((mp) => mp.type === "uart" && /rx/i.test(mp.label || mp.id));
+      if (mcuRx) {
+        addWire({
+          fromComp: target.instanceId,
+          fromPin: p.id,
+          toComp: mcu.instanceId,
+          toPin: mcuRx.id,
+          color: "#10b981",
+          routingMode: "orthogonal",
+        });
+        connectedCount++;
+        return;
+      }
+    }
+
+    // 6. UART RX (Module RX -> MCU TX)
+    if (/rx|rxd/i.test(pName)) {
+      const mcuTx = findMcuPin((mp) => mp.type === "uart" && /tx/i.test(mp.label || mp.id));
+      if (mcuTx) {
+        addWire({
+          fromComp: target.instanceId,
+          fromPin: p.id,
+          toComp: mcu.instanceId,
+          toPin: mcuTx.id,
+          color: "#14b8a6",
+          routingMode: "orthogonal",
+        });
+        connectedCount++;
+        return;
+      }
+    }
+  });
+
+  if (connectedCount === 0) {
+    return {
+      success: false,
+      message: "Semua pin sudah terhubung atau tidak ditemukan pin bus yang cocok.",
+    };
+  }
+
+  return {
+    success: true,
+    count: connectedCount,
+    mcuName: mcu.label || mcu.name || mcu.id,
+    targetName: target.label || target.name || target.id,
+  };
+}
+
+// ── Multi-Voltage Power Rail Color Coder ──────────────────────
+export function autoColorPowerRails() {
+  pushHistory();
+  let updatedCount = 0;
+
+  wires.update((ws) =>
+    ws.map((w) => {
+      const p1 = (w.fromPin || "").toLowerCase();
+      const p2 = (w.toPin || "").toLowerCase();
+
+      let newColor = w.color;
+      // 1. High voltage 12V/24V/VIN
+      if (/12v|24v|vin/i.test(p1) || /12v|24v|vin/i.test(p2)) {
+        newColor = "#8b5cf6"; // Purple
+      }
+      // 2. 5V / VCC / VBUS
+      else if (/5v|vbus|vsys/i.test(p1) || /5v|vbus|vsys/i.test(p2)) {
+        newColor = "#ef4444"; // Red
+      }
+      // 3. 3.3V / 3V3 / VDD
+      else if (/3v3|3\.3v/i.test(p1) || /3v3|3\.3v/i.test(p2)) {
+        newColor = "#f97316"; // Orange
+      }
+      // 4. Ground GND
+      else if (/gnd|vss|ground|0v/i.test(p1) || /gnd|vss|ground|0v/i.test(p2)) {
+        newColor = "#1f2937"; // Dark Charcoal
+      }
+      // 5. I2C SDA
+      else if (/sda/i.test(p1) || /sda/i.test(p2) || p1 === "g21" || p2 === "g21" || p1 === "g8" || p2 === "g8") {
+        newColor = "#3b82f6"; // Blue
+      }
+      // 6. I2C SCL
+      else if (/scl/i.test(p1) || /scl/i.test(p2) || p1 === "g22" || p2 === "g22" || p1 === "g9" || p2 === "g9") {
+        newColor = "#eab308"; // Yellow
+      }
+
+      if (newColor !== w.color) {
+        updatedCount++;
+        return { ...w, color: newColor };
+      }
+      return w;
+    })
+  );
+
+  return updatedCount;
+}

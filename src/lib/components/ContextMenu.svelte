@@ -34,6 +34,7 @@
       <button class="item" on:click={() => act('duplicate')}  role="menuitem">📋  Duplicate <kbd>Ctrl+D</kbd></button>
       <div class="divider"></div>
       <button class="item" on:click={() => act('connections')} role="menuitem">🔗  Show Connections</button>
+      <button class="item" on:click={() => act('autoConnect')} role="menuitem">⚡  Auto-Connect Bus</button>
       <div class="divider"></div>
       <button class="item danger" on:click={() => act('delete')} role="menuitem">🗑  Delete <kbd>Del</kbd></button>
 

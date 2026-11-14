@@ -9,7 +9,9 @@
            updateComponent, updateWire, updateLabel,
            removeComponent, removeComponents, removeWire, removeLabel,
            duplicateComponent, duplicateComponents, rotateComponent, rotateComponents,
-           flipComponents, alignComponents, distributeComponents, pushHistory } from '$lib/store/diagram.js'
+           flipComponents, alignComponents, distributeComponents, pushHistory,
+           autoConnectBus } from '$lib/store/diagram.js'
+  import { showAlert } from '$lib/store/dialog.js'
   import { PIN_COLORS } from '$lib/data/pin-colors.js'
   import { MCU_PINS }   from '$lib/data/mcu-pins.js'
 
@@ -43,6 +45,25 @@
   function handleRename(e) {
     if (!item?.instanceId) return
     updateComponent(item.instanceId, { label: e.target.value })
+  }
+
+  // ── Auto-Connect Bus ───────────────────────────────────
+  async function handleAutoConnect() {
+    if (!item?.instanceId) return
+    const res = autoConnectBus(item.instanceId)
+    if (res.success) {
+      await showAlert({
+        title: 'Auto-Connect Berhasil',
+        message: `Berhasil menghubungkan ${res.count} jalur kabel antara ${res.targetName} dan ${res.mcuName}.`,
+        icon: '⚡'
+      })
+    } else {
+      await showAlert({
+        title: 'Auto-Connect Gagal',
+        message: res.message,
+        icon: '⚠️'
+      })
+    }
   }
 </script>
 
@@ -191,6 +212,13 @@
         </tbody>
       </table>
     </div>
+
+    {#if !item.isMCU}
+      <button class="btn-autoconnect" on:click={handleAutoConnect} title="Otomatis sambungkan jalur I2C / SPI / Power ke MCU">
+        <span>⚡</span>
+        <span>Auto-Connect Bus ke MCU</span>
+      </button>
+    {/if}
 
     <div class="action-row">
       <button class="btn-act" on:click={() => rotateComponent(item.instanceId, 90)} title="Rotate component 90° (R)">
@@ -355,6 +383,38 @@
   .conn-lbl { color: #64748b; min-width: 32px; font-weight: 700; font-size: 10px; text-transform: uppercase; }
   .conn-val { color: #cbd5e1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
   .conn-pin { color: #38bdf8; font-weight: 700; font-family: monospace; white-space: nowrap; }
+
+  .btn-autoconnect {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    margin: 8px 0;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(59, 130, 246, 0.25));
+    border: 1px solid #38bdf8;
+    color: #38bdf8;
+    transition: all 0.15s ease;
+  }
+  .btn-autoconnect:hover {
+    background: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(56, 189, 248, 0.35);
+  }
+  :global(.light-app) .btn-autoconnect {
+    background: #e0f2fe;
+    border-color: #0284c7;
+    color: #0284c7;
+  }
+  :global(.light-app) .btn-autoconnect:hover {
+    background: #0284c7;
+    color: #ffffff;
+  }
 
   .action-row { display: flex; gap: 6px; margin-top: 10px; }
   .btn-act {

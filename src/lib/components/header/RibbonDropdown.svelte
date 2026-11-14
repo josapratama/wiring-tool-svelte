@@ -26,6 +26,9 @@
       <button class="rdd-item" on:click={() => triggerAction('open-snapshots')}>
         <span class="rdd-icon">📜</span> Riwayat Versi & Snapshot
       </button>
+      <button class="rdd-item" on:click={() => triggerAction('open-diff')}>
+        <span class="rdd-icon">🔍</span> Bandingkan Revisi (Diff)
+      </button>
       <button class="rdd-item" on:click={() => triggerAction('export-doc-pack')}>
         <span class="rdd-icon">📑</span> Dokumen Fabrikasi Lengkap (PDF)
       </button>
@@ -72,6 +75,10 @@
       </button>
       <button class="rdd-item" on:click={() => triggerAction('flip-y')}>
         <span class="rdd-icon">⇅</span> Flip Vertical <span class="rdd-key">Y</span>
+      </button>
+      <div class="rdd-divider"></div>
+      <button class="rdd-item" on:click={() => triggerAction('auto-color-rails')}>
+        <span class="rdd-icon">🎨</span> Auto-Color Power Rails (Tegangan)
       </button>
       <div class="rdd-divider"></div>
       <button class="rdd-item rdd-danger" on:click={() => triggerAction('delete')}>

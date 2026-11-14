@@ -74,11 +74,16 @@
     </button>
   </div>
 
-  <!-- Wire Color Picker -->
-  <WireColorPicker
-    {activeColor}
-    on:change={e => dispatch('change-color', e.detail)}
-  />
+  <!-- Wire Color Picker & Power Rail Color Coder -->
+  <div class="tg color-tg">
+    <WireColorPicker
+      {activeColor}
+      on:change={e => dispatch('change-color', e.detail)}
+    />
+    <button class="tbtn rails-btn" on:click={() => dispatch('auto-color-rails')} title="Warnai otomatis kabel net berdasarkan level tegangan (12V Ungu, 5V Merah, 3.3V Oranye, GND Hitam, I2C Bus Biru/Kuning)">
+      <span>🎨</span> <span class="tbtn-txt">Rails</span>
+    </button>
+  </div>
 
   <!-- Transforms (Rotate & Flip) -->
   <div class="tg transform-tg">
@@ -189,6 +194,17 @@
   }
 
   .routing-tg { gap: 2px; }
+  .color-tg { display: flex; align-items: center; gap: 4px; }
+  .rails-btn {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.3);
+    color: #c084fc;
+  }
+  .rails-btn:hover {
+    background: #9333ea;
+    color: #ffffff;
+    border-color: #a855f7;
+  }
   .mode-btn { font-size: 11px; font-weight: 600; padding: 3px 7px; }
   .tg-sep { width: 1px; height: 16px; background: #334155; margin: 0 3px; }
   .tbtn-icon { font-size: 13px; line-height: 1; }

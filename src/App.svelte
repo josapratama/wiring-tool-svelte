@@ -23,6 +23,7 @@
   import EngineeringCalcModal from '$lib/components/modals/EngineeringCalcModal.svelte'
   import CircuitSnippetsModal from '$lib/components/modals/CircuitSnippetsModal.svelte'
   import PinoutCheatSheetModal from '$lib/components/modals/PinoutCheatSheetModal.svelte'
+  import SchematicDiffModal from '$lib/components/modals/SchematicDiffModal.svelte'
   import {
     exportDiagramSvg,
     exportDiagramPng,
@@ -50,7 +51,8 @@
     removeWire, removeLabel,
     getAutoSave, clearAutoSave, initAutoSave,
     renderMode, toggleRenderMode, activeEditorView, setActiveEditorView,
-    is3dViewerOpen, isSerialMonitorOpen, addComponent, addWire
+    is3dViewerOpen, isSerialMonitorOpen, addComponent, addWire,
+    autoColorPowerRails
   } from '$lib/store/diagram.js'
   import { runERC }      from '$lib/engine/erc.js'
   import { generatePinCode } from '$lib/engine/codegen.js'
@@ -77,6 +79,8 @@
   let showCalcModal = false
   let showSnippetsModal = false
   let showPinoutModal = false
+  let showDiffModal = false
+  let diffInitialSnapshotId = null
 
   // Layout sidebars & status flash
   let showLeftSidebar = true
@@ -393,6 +397,7 @@
       case 'save':
       case 'save-json': exportJSON(); break
       case 'open-snapshots': showSnapshotModal = true; break
+      case 'open-diff': showDiffModal = true; break
       case 'export-doc-pack': handleExportDocPack(); break
       case 'export-platformio':
       case 'platformio-zip': handleExportPlatformIO(); break
@@ -422,6 +427,7 @@
       case 'rotate': doRotate(payload || 90); break
       case 'flip-x': doFlipX(); break
       case 'flip-y': doFlipY(); break
+      case 'auto-color-rails': handleAutoColorRails(); break
       case 'place-wire':
       case 'tool-wire': setTool('wire'); break
       case 'place-label':
@@ -509,6 +515,24 @@
     })
     return { total: cs.length, wires: ws.length, byTheme, totalPins, connectedPins }
   })()
+
+  // ── Multi-Voltage Power Rail Color Coder ─────────────────────────────────
+  async function handleAutoColorRails() {
+    const updated = autoColorPowerRails()
+    if (updated > 0) {
+      await showAlert({
+        title: 'Power Rails Diselaraskan',
+        message: `Berhasil mewarnai ${updated} kabel net berdasarkan level tegangan dan bus (12V Ungu, 5V Merah, 3.3V Oranye, GND Hitam, I2C Biru/Kuning).`,
+        icon: '🎨'
+      })
+    } else {
+      await showAlert({
+        title: 'Power Rails',
+        message: 'Semua kabel sudah sesuai dengan warna level tegangannya atau belum ada kabel terhubung.',
+        icon: 'ℹ️'
+      })
+    }
+  }
 
   // ── Keyboard Shortcuts Handler ────────────────────────────────────────────
   function onKeyDown(e) {
@@ -757,6 +781,7 @@
           on:place-vcc={e => placeVCC(e.detail)}
           on:set-routing-mode={e => routingMode.set(e.detail)}
           on:change-color={e => pickColor(e.detail)}
+          on:auto-color-rails={handleAutoColorRails}
           on:rotate={e => doRotate(e.detail)}
           on:flip-x={doFlipX}
           on:flip-y={doFlipY}
@@ -859,6 +884,15 @@
   <VersionHistoryModal
     bind:show={showSnapshotModal}
     {projectName}
+    on:restored={e => flash(`Proyek berhasil dipulihkan ke: ${e.detail} ✓`)}
+    on:open-diff={e => { diffInitialSnapshotId = e.detail; showDiffModal = true }}
+  />
+
+  <!-- 🔍 Schematic Revision Diff & Visual Snapshot Comparison Modal -->
+  <SchematicDiffModal
+    bind:show={showDiffModal}
+    {projectName}
+    initialSnapshotId={diffInitialSnapshotId}
     on:restored={e => flash(`Proyek berhasil dipulihkan ke: ${e.detail} ✓`)}
   />
 

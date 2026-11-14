@@ -19,7 +19,8 @@
     rotateComponent, rotateComponents, flipComponents,
     edaGridType, showDrawingSheet, showPowerFlow, activeHighlightedNet, getDiscoveredNets, highlightedWireIds as highlightedWireIdsStore,
     sheetConfig, updateSheetConfig,
-    getConnectedWireIds, getUsedPins
+    getConnectedWireIds, getUsedPins,
+    autoConnectBus
   } from '$lib/store/diagram.js'
 
   import { findCompDef }                     from '$lib/data/components-db.js'
@@ -605,6 +606,22 @@
           title: `Daftar Koneksi (${conns.length})`,
           message: lines,
           icon: '🔌'
+        })
+      }
+    }
+    if (action === 'autoConnect' && t?.instanceId) {
+      const res = autoConnectBus(t.instanceId)
+      if (res.success) {
+        showAlert({
+          title: 'Auto-Connect Berhasil',
+          message: `Berhasil menghubungkan ${res.count} jalur kabel antara ${res.targetName} dan ${res.mcuName}.`,
+          icon: '⚡'
+        })
+      } else {
+        showAlert({
+          title: 'Auto-Connect Gagal',
+          message: res.message,
+          icon: '⚠️'
         })
       }
     }

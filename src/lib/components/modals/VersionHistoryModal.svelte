@@ -130,10 +130,18 @@
       </div>
 
       <div class="action-bar">
-        <button class="btn btn-pri" on:click={createSnapshot}>
-          <span>📸</span>
-          <span>Ambil Snapshot Revisi Baru</span>
-        </button>
+        <div class="action-bar-left">
+          <button class="btn btn-pri" on:click={createSnapshot}>
+            <span>📸</span>
+            <span>Ambil Snapshot Revisi Baru</span>
+          </button>
+          {#if snapshots.length > 0}
+            <button class="btn btn-diff-main" on:click={() => { dispatch('open-diff', null); close() }}>
+              <span>🔍</span>
+              <span>Bandingkan Revisi (Diff)</span>
+            </button>
+          {/if}
+        </div>
         <span class="snap-count">{snapshots.length} Snapshot Tersimpan</span>
       </div>
 
@@ -160,6 +168,10 @@
                 </div>
               </div>
               <div class="snap-actions">
+                <button class="btn btn-diff" on:click={() => { dispatch('open-diff', snap.id); close() }} title="Bandingkan perbedaan struktur dengan diagram aktif saat ini">
+                  <span>🔍</span>
+                  <span>Diff</span>
+                </button>
                 <button class="btn btn-restore" on:click={() => restoreSnapshot(snap)} title="Pulihkan kanvas ke versi ini">
                   <span>↩</span>
                   <span>Pulihkan</span>
@@ -211,7 +223,21 @@
   .action-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 18px; background: rgba(30, 41, 59, 0.4); border-bottom: 1px solid #1e293b;
+    gap: 12px; flex-wrap: wrap;
   }
+  .action-bar-left { display: flex; align-items: center; gap: 8px; }
+  .btn-diff-main {
+    background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8;
+    padding: 7px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all .12s;
+  }
+  .btn-diff-main:hover { background: #38bdf8; color: #000; }
+  .btn-diff {
+    background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8;
+    padding: 5px 10px; border-radius: 5px; font-size: 11px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; gap: 4px;
+  }
+  .btn-diff:hover { background: #0284c7; color: #fff; }
   .snap-count { font-size: 11px; color: #94a3b8; font-weight: 600; }
 
   .snapshot-list {
